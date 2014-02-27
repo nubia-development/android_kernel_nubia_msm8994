@@ -1600,10 +1600,10 @@ static int attach_recursive_mnt(struct mount *source_mnt,
 			goto out;
 	}
 	err = propagate_mnt(dest_mnt, dest_mp, source_mnt, &tree_list);
+		br_write_lock(&vfsmount_lock);
 	if (err)
 		goto out_cleanup_ids;
 
-	br_write_lock(&vfsmount_lock);
 
 	if (IS_MNT_SHARED(dest_mnt)) {
 		for (p = source_mnt; p; p = next_mnt(p, source_mnt))
