@@ -479,30 +479,27 @@ static int rpm_vreg_send_request(struct rpm_regulator *regulator, u32 set,
 	struct msm_rpm_request *handle
 		= (set == RPM_SET_ACTIVE ? rpm_vreg->handle_active
 					: rpm_vreg->handle_sleep);
-	u32 msg_id;
-	int rc;
+	int rc = 0;
+	void *temp;
 
-	rc = unlikely(rpm_vreg->allow_atomic) ?
-	      msm_rpm_send_request_noirq(handle) : msm_rpm_send_request(handle);
-	if (rc < 0)
-		goto fail;
-
-	msg_id = rc;
-
-	if (wait_for_ack) {
-		rc = unlikely(rpm_vreg->allow_atomic) ?
-			msm_rpm_wait_for_ack_noirq(msg_id) :
-			msm_rpm_wait_for_ack(msg_id);
-		if (rc < 0)
-			goto fail;
+	if (unlikely(rpm_vreg->allow_atomic)) {
+		rc = msm_rpm_wait_for_ack_noirq(msm_rpm_send_request_noirq(
+						  handle));
+	} else if (wait_for_ack) {
+		rc = msm_rpm_wait_for_ack(msm_rpm_send_request(handle));
+	} else {
+		temp = msm_rpm_send_request_noack(handle);
+		if (IS_ERR(temp))
+			rc = PTR_ERR(temp);
 	}
 
-	return 0;
+	if (rc)
+		vreg_err(regulator,
+			"msm rpm send failed: %s %u; set=%s, rc=%d\n",
+			rpm_vreg->resource_name,
+			rpm_vreg->resource_id,
+			(set == RPM_SET_ACTIVE ? "act" : "slp"), rc);
 
-fail:
-	vreg_err(regulator, "msm rpm send failed: %s %u; set=%s, rc=%d\n",
-		rpm_vreg->resource_name, rpm_vreg->resource_id,
-		(set == RPM_SET_ACTIVE ? "act" : "slp"), rc);
 	return rc;
 }
 
