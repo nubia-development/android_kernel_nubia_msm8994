@@ -811,6 +811,7 @@ static void mdss_mdp_init_pipe_params(struct mdss_mdp_pipe *pipe)
 
 	pipe->mfd = NULL;
 	pipe->mixer_left = pipe->mixer_right = NULL;
+	pipe->mixer_stage = MDSS_MDP_STAGE_UNUSED;
 	memset(&pipe->scale, 0, sizeof(struct mdp_scale_data));
 	memset(&pipe->req_data, 0, sizeof(pipe->req_data));
 
