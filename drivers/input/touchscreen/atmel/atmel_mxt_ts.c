@@ -6276,8 +6276,8 @@ static struct mxt_platform_data *mxt_parse_dt(struct i2c_client *client)
 		keymap[T15_T97_KEY][1] = KEY_HOMEPAGE;//KEY_BACK/*KEY_MENU*/;//KEY_BACK;
 		keymap[T15_T97_KEY][2] = KEY_BACK;//KEY_MENU/*KEY_HOMEPAGE*/;
 
-		keymap[T81_KEY][0] = KEY_F10;
-		keymap[T93_KEY][0] = KEY_F10;
+		keymap[T81_KEY][0] = KEY_POWER;
+		keymap[T93_KEY][0] = KEY_POWER;
 #else
 		ret = of_property_read_u8_array(client->dev.of_node,
 			"gpio-keymap-num", num_keys, NUM_KEY_TYPE);
