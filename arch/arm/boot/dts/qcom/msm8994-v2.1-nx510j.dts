@@ -14,7 +14,7 @@
 
 #include "msm8994-v2.1.dtsi"
 #include "msm8994-pinctrl.dtsi"
-#include "msm8994-mtp.dtsi"
+#include "nx510j/msm8994-nx510j.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM8994v2.1 MTP";
