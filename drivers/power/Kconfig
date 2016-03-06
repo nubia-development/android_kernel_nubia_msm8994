@@ -13,7 +13,6 @@ config POWER_SUPPLY_DEBUG
 	help
 	  Say Y here to enable debugging messages for power supply class
 	  and drivers.
-
 config PDA_POWER
 	tristate "Generic PDA/phone power driver"
 	depends on !S390
@@ -562,6 +561,79 @@ config MSM_BCL_PERIPHERAL_CTL
 	  Say Y here to enable this BCL PMIC peripheral driver. This driver
 	  provides routines to configure and monitor the BCL
 	  PMIC peripheral.
+
+################ZTEMT charger
+menu "ZTEMT charger and battery and fuel guage"
+
+config ZTEMT_MSM8994_CHARGER
+	bool "ZTEMT For MSM8994 Platfrom Charge"
+	default n
+	help
+	  ZTEMT For MSM8994 Platfrom Charge
+
+config ZTEMT_SUPPORT_CHARGER_9V
+	bool "ZTEMT support the hvdcp 9V"
+	default n
+	help
+	  ZTEMT support the hvdcp 9V
+
+config ZTEMT_SUPPORT_CHARGER_5V
+	bool "ZTEMT donot support the hvdcp 9V"
+	default n
+	help
+	  ZTEMT donot support the hvdcp 9V	  
+
+config ZTEMT_MSM8994_FUEL_GAUGE
+	bool "ZTEMT For MSM8994 Platfrom Fuel Gauge"
+	default n
+	help
+	  ZTEMT For MSM8994 Platfrom fuel gauge
+
+config ZTEMT_CHARGE_PLUS_X_MODE
+	bool "ZTEMT NX508J Charge X Mode"
+	default n
+	help
+	  ZTEMT NX508J Charge X Mode
+
+endmenu
+################ztemt battery config
+
+
+################ztemt hw_version config start################
+config ZTEMT_HW_VERSION
+	bool "ZTEMT HW VERSION"
+	default n
+	help
+	  ZTEMT HW VERSION
+
+config ZTEMT_HW_VERSION_DEBUG
+	bool "ZTEMT HW VERSION DEBUG"
+	depends on ZTEMT_HW_VERSION
+	default n
+	help
+	  ZTEMT HW VERSION DEBUG
+
+config ZTEMT_HW_VERSION_NX517J
+	bool "ZTEMT HW VERSION NX517J"
+	depends on ZTEMT_HW_VERSION
+	default n
+	help
+	  ZTEMT HW VERSION NX517J
+
+config ZTEMT_HW_CONFIG_ITEM
+	bool "ZTEMT HW CONFIG ITEM"
+	depends on ZTEMT_HW_VERSION
+	default n
+	help
+	  ZTEMT HW CONFIG ITEM
+	  
+config ZTEMT_HW_VER_BY_ADC
+	bool "ZTEMT HW VER BY ADC"
+	depends on ZTEMT_HW_VERSION
+	default n
+	help
+	  ZTEMT HW VER BY ADC
+################ztemt hw_version config end#################
 
 source "drivers/power/reset/Kconfig"
 

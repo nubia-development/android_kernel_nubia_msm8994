@@ -204,6 +204,12 @@ struct msm_eeprom_memory_block_t {
 	uint32_t num_map;	/* number of map blocks */
 	uint8_t *mapdata;
 	uint32_t num_data;	/* size of total mapdata */
+	// ZTEMT: fuyipeng add for camera -----start
+    #ifdef CONFIG_IMX179
+    uint32_t num_custom;
+    struct eeprom_map_t *zte_custom_map;
+    #endif
+// ZTEMT: fuyipeng add for camera -----end
 };
 
 struct msm_eeprom_cmm_t {

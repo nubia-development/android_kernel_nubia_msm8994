@@ -275,3 +275,23 @@ config MSM_FD
 	 depends on MSMB_CAMERA
 	 ---help---
 	    Enables support for the MSM FD face detection engine.
+config IMX179
+     bool "Sensor IMX179 (BAYER 8M)"
+	 depends on MSMB_CAMERA
+     ---help---
+	   Sony 8 MP Bayer Sensor with auto focus, uses 2 mipi lanes full resolution @15fps
+config IMX234_OIS_SHARP
+     bool "Sensor IMX234 OIS SHARP (BAYER 16M)"
+	 depends on MSMB_CAMERA
+     ---help---
+	   Sony 16 MP Bayer Sensor with auto focus, uses 4 mipi lanes full resolution @30fps
+config IMX234_AF
+     bool "Sensor IMX234 AF(BAYER 16M)"
+	 depends on MSMB_CAMERA
+     ---help---
+	   Sony 16 MP Bayer Sensor with auto focus, uses 4 mipi lanes full resolution @30fps
+
+config ZTE_CAMERA_NX508J
+        tristate "nx508j camera support"
+
+

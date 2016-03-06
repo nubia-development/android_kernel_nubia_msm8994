@@ -2878,6 +2878,9 @@ resume_exit:
 #ifdef CONFIG_PM_SLEEP
 static int msm_spi_suspend(struct device *device)
 {
+#ifdef CONFIG_SII8620_MHL_TX
+	disable_irq(gpio_to_irq(942));
+#endif
 	if (!pm_runtime_enabled(device) || !pm_runtime_suspended(device)) {
 		struct platform_device *pdev = to_platform_device(device);
 		struct spi_master *master = platform_get_drvdata(pdev);
@@ -2910,6 +2913,9 @@ static int msm_spi_resume(struct device *device)
 	 * clock ON and gpio configuration
 	 */
 	dev_dbg(device, "system resume");
+	#ifdef CONFIG_SII8620_MHL_TX
+	enable_irq(gpio_to_irq(942));
+	#endif
 	return 0;
 }
 #else

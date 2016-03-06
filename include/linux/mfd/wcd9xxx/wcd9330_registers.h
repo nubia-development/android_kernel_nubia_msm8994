@@ -424,7 +424,11 @@
 #define TOMTOM_A_MICB_1_CTL			(0x12B)
 #define TOMTOM_A_MICB_1_CTL__POR				(0x16)
 #define TOMTOM_A_MICB_1_INT_RBIAS			(0x12C)
+#ifdef CONFIG_ZTEMT_AUDIO
+#define TOMTOM_A_MICB_1_INT_RBIAS__POR				(0x20)
+#else
 #define TOMTOM_A_MICB_1_INT_RBIAS__POR				(0x24)
+#endif
 #define TOMTOM_A_MICB_1_MBHC			(0x12D)
 #define TOMTOM_A_MICB_1_MBHC__POR				(0x01)
 #define TOMTOM_A_MICB_CFILT_2_CTL			(0x12E)
@@ -436,7 +440,11 @@
 #define TOMTOM_A_MICB_2_CTL			(0x131)
 #define TOMTOM_A_MICB_2_CTL__POR				(0x16)
 #define TOMTOM_A_MICB_2_INT_RBIAS			(0x132)
+#ifdef CONFIG_ZTEMT_AUDIO
+#define TOMTOM_A_MICB_2_INT_RBIAS__POR				(0x00)
+#else
 #define TOMTOM_A_MICB_2_INT_RBIAS__POR				(0x24)
+#endif
 #define TOMTOM_A_MICB_2_MBHC			(0x133)
 #define TOMTOM_A_MICB_2_MBHC__POR				(0x02)
 #define TOMTOM_A_MICB_CFILT_3_CTL			(0x134)
@@ -446,13 +454,21 @@
 #define TOMTOM_A_MICB_CFILT_3_PRECHRG			(0x136)
 #define TOMTOM_A_MICB_CFILT_3_PRECHRG__POR				(0x38)
 #define TOMTOM_A_MICB_3_CTL			(0x137)
+#ifdef CONFIG_ZTEMT_AUDIO
+#define TOMTOM_A_MICB_3_CTL__POR				(0x06)
+#else
 #define TOMTOM_A_MICB_3_CTL__POR				(0x16)
+#endif
 #define TOMTOM_A_MICB_3_INT_RBIAS			(0x138)
 #define TOMTOM_A_MICB_3_INT_RBIAS__POR				(0x24)
 #define TOMTOM_A_MICB_3_MBHC			(0x139)
 #define TOMTOM_A_MICB_3_MBHC__POR				(0x00)
 #define TOMTOM_A_MICB_4_CTL			(0x13A)
+#ifdef CONFIG_ZTEMT_AUDIO
+#define TOMTOM_A_MICB_4_CTL__POR				(0x06)
+#else
 #define TOMTOM_A_MICB_4_CTL__POR				(0x16)
+#endif
 #define TOMTOM_A_MICB_4_INT_RBIAS			(0x13B)
 #define TOMTOM_A_MICB_4_INT_RBIAS__POR				(0x24)
 #define TOMTOM_A_MICB_4_MBHC			(0x13C)

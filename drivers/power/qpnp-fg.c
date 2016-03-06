@@ -35,6 +35,40 @@
 #include <linux/alarmtimer.h>
 #include <linux/qpnp-revid.h>
 
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+static int debug_mask_fg = 1;
+static int  debug_mask_capacity = 0;
+module_param_named(
+	debug_mask_fg, debug_mask_fg, int, S_IRUSR | S_IWUSR
+);
+#define DBG_FG(x...) do {if (debug_mask_fg) pr_info(">>ZTEMT_FG>>  " x); } while (0)
+#endif
+
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+//´ò¿ªµ÷ÊÔ½Ó¿Ú
+//#undef pr_debug
+//#define pr_debug   pr_info
+#undef KERN_INFO
+#define KERN_INFO KERN_ERR
+#endif
+
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+	#define	SUMSUNG_BTAAERY_ID_MAX	500000 
+	#define	SUMSUNG_BTAAERY_ID_MIN	400000 
+	#define	ATL_BTAAERY_ID_MAX	20000 
+	#define	ATL_BTAAERY_ID_MIN	10000 
+	struct battery_id_map {
+		int id_max;
+		int id_min;
+		char *name;
+	};
+
+	static const struct battery_id_map batt_id_map[] = {
+		{ATL_BTAAERY_ID_MAX, ATL_BTAAERY_ID_MIN,  "ztemt_atl_2850mah"},
+		{SUMSUNG_BTAAERY_ID_MAX, SUMSUNG_BTAAERY_ID_MIN,"ztemt_sumsung_3000mah"}
+	};
+#endif
+
 /* Register offsets */
 
 /* Interrupt offsets */
@@ -42,6 +76,7 @@
 #define INT_EN_CLR(base)			(base + 0x16)
 
 /* SPMI Register offsets */
+//0X00004009--FG_SOC_FG_SOC
 #define SOC_MONOTONIC_SOC	0x09
 #define OTP_CFG1		0xE2
 #define SOC_BOOT_MOD		0x50
@@ -53,7 +88,11 @@
 #define RAM_OFFSET		0x400
 
 /* Bit/Mask definitions */
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+#define FULL_PERCENT		0xFD
+#else
 #define FULL_PERCENT		0xFF
+#endif
 #define MAX_TRIES_SOC		5
 #define MA_MV_BIT_RES		39
 #define MSB_SIGN		BIT(7)
@@ -196,20 +235,34 @@ enum fg_mem_data_index {
 		.value = _value,			\
 	}						\
 
+/*ZTEMT Modify
+*/
 static struct fg_mem_setting settings[FG_MEM_SETTING_MAX] = {
 	/*       ID                    Address, Offset, Value*/
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	SETTING(SOFT_COLD,       0x454,   0,  -50),
+	SETTING(SOFT_HOT,        0x454,    1,    530),
+	SETTING(HARD_COLD,       0x454,   2,  -60),
+	SETTING(HARD_HOT,        0x454,   3,    550),
+#else
 	SETTING(SOFT_COLD,       0x454,   0,      100),
 	SETTING(SOFT_HOT,        0x454,   1,      400),
 	SETTING(HARD_COLD,       0x454,   2,      50),
 	SETTING(HARD_HOT,        0x454,   3,      450),
+#endif
 	SETTING(RESUME_SOC,      0x45C,   1,      0),
 	SETTING(BCL_LM_THRESHOLD, 0x47C,   2,      50),
 	SETTING(BCL_MH_THRESHOLD, 0x47C,   3,      752),
 	SETTING(TERM_CURRENT,	 0x40C,   2,      250),
 	SETTING(CHG_TERM_CURRENT, 0x4F8,   2,      250),
 	SETTING(IRQ_VOLT_EMPTY,	 0x458,   3,      3100),
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+	SETTING(CUTOFF_VOLTAGE,	 0x40C,   0,      3300),
+	SETTING(VBAT_EST_DIFF,	 0x000,   0,      100),
+#else
 	SETTING(CUTOFF_VOLTAGE,	 0x40C,   0,      3200),
 	SETTING(VBAT_EST_DIFF,	 0x000,   0,      30),
+#endif
 	SETTING(DELTA_SOC,	 0x450,   3,      1),
 	SETTING(SOC_MAX,	 0x458,   1,      85),
 	SETTING(SOC_MIN,	 0x458,   2,      15),
@@ -239,6 +292,10 @@ static struct fg_mem_data fg_data[FG_DATA_MAX] = {
 	DATA(BATT_ID,         0x594,   1,      1,     -EINVAL),
 	DATA(BATT_ID_INFO,    0x594,   3,      1,     -EINVAL),
 };
+
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+static const int  delay_update_soc_ms = 2000;
+#endif
 
 static int fg_debug_mask;
 module_param_named(
@@ -418,6 +475,12 @@ struct fg_chip {
 	struct delayed_work	update_sram_data;
 	struct delayed_work	update_temp_work;
 	struct delayed_work	check_empty_work;
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+	struct delayed_work       check_soc_update_work;  
+	int irq_update_soc;
+	int work_update_soc;
+	unsigned long last_check_soc_update_time;
+#endif
 	char			*batt_profile;
 	u8			thermal_coefficients[THERMAL_COEFF_N_BYTES];
 	u32			cc_cv_threshold_mv;
@@ -1667,6 +1730,17 @@ out:
 	}
 	fg_relax(&chip->update_temp_wakeup_source);
 
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+       chip->work_update_soc = get_prop_capacity(chip);
+       if(chip->irq_update_soc != chip->work_update_soc){
+            if (chip->power_supply_registered){
+                 pr_info("charger:jing update_temp_data :work_update_soc =%d--irq_update_soc =%d\n ",   chip->work_update_soc,chip->irq_update_soc);
+                 power_supply_changed(&chip->bms_psy);
+                 chip->irq_update_soc = chip->work_update_soc;
+            }
+       }
+#endif
+
 resched:
 	schedule_delayed_work(
 		&chip->update_temp_work,
@@ -2885,6 +2959,17 @@ static void dump_sram(struct work_struct *work)
 		pr_info("%03X %s\n", SRAM_DUMP_START + i, str);
 	}
 	devm_kfree(chip->dev, buffer);
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+	if(debug_mask_fg){
+		int delay_ms = 10;
+		debug_mask_capacity = 1;
+		pr_info("charger:jing fg soc fg_is_batt_empty= %d battery_missing=%d,profile_loaded&&use_otp_profile=%d\n",\
+				fg_is_batt_empty(chip),chip->battery_missing,(!chip->profile_loaded && !chip->use_otp_profile));
+		update_sram_data(chip,&delay_ms);
+		get_prop_capacity(chip);
+		debug_mask_capacity = 0;
+	}
+#endif
 }
 
 #define MAXRSCHANGE_REG		0x434
@@ -3066,6 +3151,13 @@ static irqreturn_t fg_soc_irq_handler(int irq, void *_chip)
 	if (fg_debug_mask & FG_IRQS)
 		pr_info("triggered 0x%x\n", soc_rt_sts);
 
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+	if (fg_est_dump){
+		schedule_work(&chip->dump_sram);
+	}
+       schedule_delayed_work(&chip->check_soc_update_work,msecs_to_jiffies(delay_update_soc_ms ));
+#endif
+
 	schedule_work(&chip->battery_age_work);
 
 	if (chip->power_supply_registered)
@@ -3191,6 +3283,17 @@ static void set_resume_soc_work(struct work_struct *work)
 done:
 	fg_relax(&chip->resume_soc_wakeup_source);
 }
+
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+static void check_soc_update_work(struct work_struct *work)
+{
+    struct fg_chip *chip = container_of(work,
+			struct fg_chip,
+			check_soc_update_work.work);
+   
+    chip->irq_update_soc = get_prop_capacity(chip);
+}  
+#endif
 
 
 #define OCV_COEFFS_START_REG		0x4C0
@@ -3452,6 +3555,30 @@ static void update_cc_cv_setpoint(struct fg_chip *chip)
 			tmp[0], tmp[1], CC_CV_SETPOINT_REG);
 }
 
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+void get_fg_battery_type(struct fg_chip *chip)
+{
+	int batt_id_kohm = 0;
+	int current_index = 0;
+	fg_batt_type =  batt_id_map[0].name;
+	
+	if(chip){
+		batt_id_kohm = get_sram_prop_now(chip, FG_DATA_BATT_ID);
+		while (current_index < ARRAY_SIZE(batt_id_map)) {
+			if ( (batt_id_map[current_index].id_min <= batt_id_kohm) 
+				&& (batt_id_kohm <= batt_id_map[current_index].id_max) ) {
+				fg_batt_type = batt_id_map[current_index].name;
+				break;
+			}
+			current_index++;
+		}
+	}	
+	if(debug_mask_fg) {
+		pr_info("charger :jing fg_batt_type:%s--batt_id_kohm:%d \n",fg_batt_type,batt_id_kohm);
+	}	
+}
+#endif
+
 #define LOW_LATENCY			BIT(6)
 #define BATT_PROFILE_OFFSET		0x4C0
 #define PROFILE_INTEGRITY_REG		0x53C
@@ -3491,6 +3618,9 @@ static int fg_do_restart(struct fg_chip *chip, bool write_profile)
 	 */
 	mutex_lock(&chip->rw_lock);
 	fg_release_access(chip);
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+	get_fg_battery_type(chip);
+#endif
 
 	rc = fg_masked_write(chip, chip->soc_base + SOC_BOOT_MOD,
 			NO_OTP_PROF_RELOAD, 0, 1);
@@ -3657,6 +3787,10 @@ static int fg_batt_profile_init(struct fg_chip *chip)
 	bool tried_again = false, vbat_in_range, profiles_same;
 	u8 reg = 0;
 
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+	get_fg_battery_type(chip);
+#endif
+
 wait:
 	fg_stay_awake(&chip->profile_wakeup_source);
 	ret = wait_for_completion_interruptible_timeout(&chip->batt_id_avail,
@@ -3801,6 +3935,11 @@ wait:
 		pr_info("Vbat out of range: v_current_pred: %d, v:%d\n",
 				fg_data[FG_DATA_CPRED_VOLTAGE].value,
 				fg_data[FG_DATA_VOLTAGE].value);
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+	if(debug_mask_fg) {
+		pr_info("charger :jing Using new profile\n");
+	}	
+#else	
 	if ((fg_debug_mask & FG_STATUS) && fg_is_batt_empty(chip))
 		pr_info("battery empty\n");
 	if ((fg_debug_mask & FG_STATUS) && !profiles_same)
@@ -3811,6 +3950,7 @@ wait:
 				DUMP_PREFIX_NONE, 16, 1,
 				chip->batt_profile, len, false);
 	}
+#endif
 	if (chip->power_supply_registered)
 		power_supply_changed(&chip->bms_psy);
 
@@ -4419,6 +4559,9 @@ static void fg_cleanup(struct fg_chip *chip)
 	cancel_delayed_work_sync(&chip->update_temp_work);
 	cancel_delayed_work_sync(&chip->update_jeita_setting);
 	cancel_delayed_work_sync(&chip->check_empty_work);
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+       cancel_delayed_work(&chip->check_soc_update_work);
+#endif
 	alarm_try_to_cancel(&chip->fg_cap_learning_alarm);
 	cancel_work_sync(&chip->rslow_comp_work);
 	cancel_work_sync(&chip->set_resume_soc_work);
@@ -4929,6 +5072,9 @@ static int fg_common_hw_init(struct fg_chip *chip)
 
 	resume_soc_raw = settings[FG_MEM_RESUME_SOC].value;
 	if (resume_soc_raw > 0) {
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+	resume_soc_raw = resume_soc_raw + 1;//set the resume soc from 0xfc to 0xfd
+#endif
 		rc = fg_set_resume_soc(chip, resume_soc_raw);
 		if (rc) {
 			pr_err("Couldn't set resume SOC for FG\n");
@@ -5198,6 +5344,13 @@ static void delayed_init_work(struct work_struct *work)
 	if (!chip->use_otp_profile)
 		schedule_work(&chip->batt_profile_init);
 
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+       schedule_delayed_work(&chip->check_soc_update_work,msecs_to_jiffies(delay_update_soc_ms ));
+       if (chip->power_supply_registered){
+		power_supply_changed(&chip->bms_psy);
+       }
+#endif
+
 	pr_debug("FG: HW_init success\n");
 }
 
@@ -5250,6 +5403,9 @@ static int fg_probe(struct spmi_device *spmi)
 	INIT_DELAYED_WORK(&chip->update_sram_data, update_sram_data_work);
 	INIT_DELAYED_WORK(&chip->update_temp_work, update_temp_data);
 	INIT_DELAYED_WORK(&chip->check_empty_work, check_empty_work);
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+      	INIT_DELAYED_WORK(&chip->check_soc_update_work, check_soc_update_work);  
+#endif
 	INIT_WORK(&chip->rslow_comp_work, rslow_comp_work);
 	INIT_WORK(&chip->fg_cap_learning_work, fg_cap_learning_work);
 	INIT_WORK(&chip->batt_profile_init, batt_profile_init);
@@ -5413,6 +5569,9 @@ cancel_work:
 	cancel_delayed_work_sync(&chip->update_sram_data);
 	cancel_delayed_work_sync(&chip->update_temp_work);
 	cancel_delayed_work_sync(&chip->check_empty_work);
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+       cancel_delayed_work(&chip->check_soc_update_work);
+#endif
 	alarm_try_to_cancel(&chip->fg_cap_learning_alarm);
 	cancel_work_sync(&chip->set_resume_soc_work);
 	cancel_work_sync(&chip->fg_cap_learning_work);
@@ -5467,6 +5626,9 @@ static void check_and_update_sram_data(struct fg_chip *chip)
 
 	schedule_delayed_work(
 		&chip->update_sram_data, msecs_to_jiffies(time_left * 1000));
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+	schedule_delayed_work(&chip->check_soc_update_work,msecs_to_jiffies(time_left * 1000));
+#endif
 }
 
 static int fg_suspend(struct device *dev)
@@ -5478,6 +5640,9 @@ static int fg_suspend(struct device *dev)
 
 	cancel_delayed_work(&chip->update_temp_work);
 	cancel_delayed_work(&chip->update_sram_data);
+#ifdef CONFIG_ZTEMT_MSM8994_FUEL_GAUGE
+       cancel_delayed_work(&chip->check_soc_update_work);
+#endif
 
 	return 0;
 }

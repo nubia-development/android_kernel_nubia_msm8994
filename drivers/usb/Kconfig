@@ -21,6 +21,10 @@ menuconfig USB_SUPPORT
 	  You will also need drivers from the following menu to make use of it.
 
 if USB_SUPPORT
+config USB_UDISK_DETECT_FIX
+       tristate "ztemt fix udisk detect bug"
+       default n
+       depends on USB || USB_GADGET
 
 config USB_COMMON
 	tristate

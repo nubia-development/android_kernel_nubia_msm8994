@@ -865,6 +865,10 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 	int rc;
 	u8 val;
 	int duty_us, duty_ns, period_us;
+	if(led->cdev.brightness == 2)
+		led->cdev.brightness =0;
+	else if(led->cdev.brightness !=0)
+	    led->cdev.brightness =5;
 
 	if (led->cdev.brightness) {
 		if (led->mpp_cfg->mpp_reg && !led->mpp_cfg->enable) {

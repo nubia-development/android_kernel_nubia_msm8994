@@ -62,7 +62,11 @@
 	((d >> 16) & 0xff) + ((d >> 24) & 0xff))
 
 /* Enable HDCP by default */
+#ifdef CONFIG_SII8620_MHL_TX
 static bool hdcp_feature_on = true;
+#else
+static bool hdcp_feature_on = false;
+#endif
 
 /* Supported HDMI Audio channels */
 #define MSM_HDMI_AUDIO_CHANNEL_2	2
@@ -161,6 +165,9 @@ struct hdmi_tx_audio_acr_arry {
 	u32 pclk;
 	struct hdmi_tx_audio_acr lut[AUDIO_SAMPLE_RATE_MAX];
 };
+#ifdef CONFIG_ZTEMT_MHL_POWER
+extern bool is_mhl_connected; 
+#endif
 
 static int hdmi_tx_set_mhl_hpd(struct platform_device *pdev, uint8_t on);
 static int hdmi_tx_sysfs_enable_hpd(struct hdmi_tx_ctrl *hdmi_ctrl, int on);
@@ -719,6 +726,13 @@ static ssize_t hdmi_tx_sysfs_wta_hpd(struct device *dev,
 	    (!hdmi_ctrl->mhl_hpd_on || hdmi_ctrl->hpd_feature_on))
 		return 0;
 
+  #ifdef CONFIG_ZTEMT_MHL_POWER
+  if(!is_mhl_connected)
+      return 0;
+  #else
+      return 0;
+  #endif
+  
 	switch (hpd) {
 	case HPD_OFF:
 	case HPD_DISABLE:
@@ -2101,7 +2115,7 @@ static int hdmi_tx_enable_power(struct hdmi_tx_ctrl *hdmi_ctrl,
 				__func__, hdmi_tx_pm_name(module));
 			goto error;
 		}
-
+		#ifndef CONFIG_SII8620_MHL_TX
 		rc = msm_dss_enable_gpio(power_data->gpio_config,
 			power_data->num_gpio, 1);
 		if (rc) {
@@ -2109,7 +2123,7 @@ static int hdmi_tx_enable_power(struct hdmi_tx_ctrl *hdmi_ctrl,
 				__func__, hdmi_tx_pm_name(module), rc);
 			goto disable_vreg;
 		}
-
+		#endif
 		rc = msm_dss_clk_set_rate(power_data->clk_config,
 			power_data->num_clk);
 		if (rc) {
@@ -2139,8 +2153,10 @@ static int hdmi_tx_enable_power(struct hdmi_tx_ctrl *hdmi_ctrl,
 
 disable_gpio:
 	msm_dss_enable_gpio(power_data->gpio_config, power_data->num_gpio, 0);
+#ifndef CONFIG_SII8620_MHL_TX
 disable_vreg:
 	msm_dss_enable_vreg(power_data->vreg_config, power_data->num_vreg, 0);
+#endif
 error:
 	return rc;
 } /* hdmi_tx_enable_power */

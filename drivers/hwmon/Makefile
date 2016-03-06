@@ -145,6 +145,39 @@ obj-$(CONFIG_SENSORS_EPM_ADC)	+= epm_adc.o
 obj-$(CONFIG_SENSORS_QPNP_ADC_VOLTAGE)	+= qpnp-adc-voltage.o qpnp-adc-common.o
 obj-$(CONFIG_SENSORS_QPNP_ADC_CURRENT)	+= qpnp-adc-current.o qpnp-adc-common.o
 obj-$(CONFIG_SENSORS_BOOST_DYNAMIC_CONTROLLER)	+= boost-dynamic-controller.o
+################################################# SENROS START
+
+################################################# ALS_PS START
+obj-$(CONFIG_ZTEMT_SENSORS_ALS_PS_AUTO_DETECT) += als_prox.o tmg399x.o tmd2772.o
+obj-$(CONFIG_ZTEMT_SENSORS_ALS_PS_TMG3993) += tmg399x.o
+obj-$(CONFIG_ZTEMT_SENSORS_ALS_PS_TMD2772) += tmd2772.o
+################################################# ALS_PS END
+
+################################################# TEMP_HUMI START
+obj-$(CONFIG_ZTEMT_SENSORS_TEMP_HUMI)      += shtc1.o
+################################################# TEMP_HUMI END
+
+################################################# TEMP_HUMI START
+obj-$(CONFIG_ZTEMT_SENSORS_COMMON)      += sensor_common.o
+################################################# TEMP_HUMI END
+
+
+################################################# IR_REMOTE START
+obj-$(CONFIG_ZTEMT_SENSORS_IR_REMOTE_I_TWO)      += i_two.o
+################################################# IR_REMOTE END
+
+################################################# HALL_DEVICE START
+obj-$(CONFIG_ZTEMT_SENSORS_HALL_DEVICE_SIGNLE_OUT)  += hall_signle_out.o
+obj-$(CONFIG_ZTEMT_SENSORS_HALL_DEVICE_PAIR_OUT)  	+= hall_pair_out.o
+################################################# HALL_DEVICE END
+################################################# PRESSURE_DEVICE START
+obj-$(CONFIG_ZTEMT_SENSORS_PRESSURE_DEVICE)			+= pressure_device.o
+################################################# PRESSURE_DEVICE END
+
+################################################# FINGERPRINT_DEVICE START
+obj-$(CONFIG_ZTEMT_SENSORS_FP_ET310)	+= et310/
+################################################# INGERPRINT_DEVICE END
+################################################# SENROS END
 
 obj-$(CONFIG_PMBUS)		+= pmbus/
 

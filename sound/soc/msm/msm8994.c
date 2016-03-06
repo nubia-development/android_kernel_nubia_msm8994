@@ -105,12 +105,20 @@ static int msm8994_spk_control = 1;
 static int msm_slim_0_rx_ch = 1;
 static int msm_slim_0_tx_ch = 1;
 static int msm_vi_feed_tx_ch = 2;
+#ifdef CONFIG_HEADPHONE_SWITCH
+static int headphone_switch_gpio = -1;
+#endif
 
 static int msm_btsco_rate = SAMPLING_RATE_8KHZ;
 static int msm_hdmi_rx_ch = 2;
 static int msm_proxy_rx_ch = 2;
 static int hdmi_rx_sample_rate = SAMPLING_RATE_48KHZ;
+#ifdef CONFIG_SND_SOC_AK4375
+static int ak4375_mi2s_sample_rate = SAMPLING_RATE_48KHZ;
+static int ak4375_mi2s_bit_format = SNDRV_PCM_FORMAT_S16_LE;
+#else
 static int msm_pri_mi2s_tx_ch = 2;
+#endif
 
 static struct mutex cdc_mclk_mutex;
 static struct clk *codec_clk;
@@ -139,6 +147,9 @@ static struct audio_plug_dev *apq8094_db_ext_fp_out_dev;
 static const char *const pin_states[] = {"sleep", "auxpcm-active",
 					 "mi2s-active", "active"};
 static const char *const spk_function[] = {"Off", "On"};
+#ifdef CONFIG_HEADPHONE_SWITCH
+static const char *const headphone_switch_text[] = {"Off", "On"};
+#endif
 static const char *const slim0_rx_ch_text[] = {"One", "Two"};
 static const char *const vi_feed_ch_text[] = {"One", "Two"};
 static const char *const slim0_tx_ch_text[] = {"One", "Two", "Three", "Four",
@@ -169,6 +180,7 @@ static void *def_codec_mbhc_cal(void);
 static int msm_snd_enable_codec_ext_clk(struct snd_soc_codec *codec,
 					int enable, bool dapm);
 
+
 static struct wcd9xxx_mbhc_config mbhc_cfg = {
 	.read_fw_bin = false,
 	.calibration = NULL,
@@ -176,7 +188,11 @@ static struct wcd9xxx_mbhc_config mbhc_cfg = {
 	.anc_micbias = MBHC_MICBIAS2,
 	.mclk_cb_fn = msm_snd_enable_codec_ext_clk,
 	.mclk_rate = TOMTOM_EXT_CLK_RATE,
+#ifdef CONFIG_ZTEMT_AUDIO
+	.gpio_level_insert = 0,
+#else
 	.gpio_level_insert = 1,
+#endif
 	.detect_extn_cable = true,
 	.micbias_enable_flags = 1 << MBHC_MICBIAS_ENABLE_THRESHOLD_HEADSET,
 	.insert_detect = true,
@@ -188,7 +204,11 @@ static struct wcd9xxx_mbhc_config mbhc_cfg = {
 	.do_recalibration = true,
 	.use_vddio_meas = true,
 	.enable_anc_mic_detect = false,
+#ifdef CONFIG_ZTEMT_AUDIO
+	.hw_jack_type = FOUR_POLE_JACK,
+#else
 	.hw_jack_type = SIX_POLE_JACK,
+#endif
 	.key_code[0] = KEY_MEDIA,
 	.key_code[1] = KEY_VOICECOMMAND,
 	.key_code[2] = KEY_VOLUMEUP,
@@ -199,6 +219,17 @@ static struct wcd9xxx_mbhc_config mbhc_cfg = {
 	.key_code[7] = 0,
 };
 
+#ifdef CONFIG_SND_SOC_AK4375
+static struct afe_clk_cfg mi2s_rx_clk = {
+	AFE_API_VERSION_I2S_CONFIG,
+	Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ,
+	Q6AFE_LPASS_OSR_CLK_12_P288_MHZ,
+	Q6AFE_LPASS_CLK_SRC_INTERNAL,
+	Q6AFE_LPASS_CLK_ROOT_DEFAULT,
+	Q6AFE_LPASS_MODE_CLK1_VALID,
+	0,
+};
+#else
 static struct afe_clk_cfg mi2s_tx_clk = {
 	AFE_API_VERSION_I2S_CONFIG,
 	Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ,
@@ -208,6 +239,40 @@ static struct afe_clk_cfg mi2s_tx_clk = {
 	Q6AFE_LPASS_MODE_CLK1_VALID,
 	0,
 };
+#endif
+
+#ifdef CONFIG_HEADPHONE_SWITCH
+static int headphone_switch_gpio_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+
+    if(headphone_switch_gpio >=0) {
+        printk("headphone_switch_gpio_get gpio value is %d\n",gpio_get_value(headphone_switch_gpio));
+        ucontrol->value.integer.value[0] = gpio_get_value(headphone_switch_gpio);
+    }
+    return 0;
+}
+
+static int headphone_switch_gpio_put(struct snd_kcontrol *kcontrol,
+        struct snd_ctl_elem_value *ucontrol)
+{
+    switch (ucontrol->value.integer.value[0]) {
+        case 1:
+            if(headphone_switch_gpio >=0) {
+                gpio_direction_output(headphone_switch_gpio,1);
+                printk("headphone_switch_gpio_put gpio value is %d\n",gpio_get_value(headphone_switch_gpio));
+            }
+            break;
+        default:
+            if(headphone_switch_gpio >=0) {
+                gpio_direction_output(headphone_switch_gpio,0);
+                printk("headphone_switch_gpio_put gpio value is %d\n",gpio_get_value(headphone_switch_gpio));
+            }
+            break;
+    }
+    return 0;
+}
+#endif
 
 static inline int param_is_mask(int p)
 {
@@ -586,7 +651,22 @@ static int msm8994_ext_us_amp_init(void)
 static void msm8994_ext_us_amp_enable(u32 on)
 {
 	if (on)
+	#ifdef CONFIG_ZTEMT_AUDIO
+	{
 		gpio_direction_output(ext_us_amp_gpio, 1);
+		//usleep(3);
+		gpio_direction_output(ext_us_amp_gpio, 0);
+		//usleep(3);
+		gpio_direction_output(ext_us_amp_gpio, 1);
+		//usleep(3);
+		gpio_direction_output(ext_us_amp_gpio, 0);	
+		//usleep(3);	
+		gpio_direction_output(ext_us_amp_gpio, 1);
+		//usleep(3);
+	}
+	#else
+		gpio_direction_output(ext_us_amp_gpio, 1);
+	#endif
 	else
 		gpio_direction_output(ext_us_amp_gpio, 0);
 
@@ -686,6 +766,9 @@ static const struct snd_soc_dapm_widget msm8994_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Lineout_4 amp", NULL),
 	SND_SOC_DAPM_SPK("ultrasound amp", msm_ext_ultrasound_event),
 	SND_SOC_DAPM_MIC("Handset Mic", NULL),
+	#ifdef CONFIG_ZTEMT_AUDIO
+	SND_SOC_DAPM_MIC("Sub Handset Mic", NULL),
+	#endif
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("ANCRight Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("ANCLeft Headset Mic", NULL),
@@ -1111,6 +1194,81 @@ static int msm8994_auxpcm_rate_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+#ifdef CONFIG_SND_SOC_AK4375
+static int ak4375_mi2s_sample_rate_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	int sample_rate_val = 0;
+	switch (ak4375_mi2s_sample_rate) {
+	case SAMPLING_RATE_192KHZ:
+		sample_rate_val = 2;
+		break;
+	case SAMPLING_RATE_96KHZ:
+		sample_rate_val = 1;
+		break;
+	case SAMPLING_RATE_48KHZ:
+		default:
+		sample_rate_val = 0;
+		break;
+	}
+	
+	ucontrol->value.integer.value[0] = sample_rate_val;
+	return 0;
+}
+
+static int ak4375_mi2s_sample_rate_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{	
+    switch (ucontrol->value.integer.value[0]) {
+	case 2:
+		ak4375_mi2s_sample_rate = SAMPLING_RATE_192KHZ;
+		break;
+	case 1:
+		ak4375_mi2s_sample_rate = SAMPLING_RATE_96KHZ;
+		break;
+	case 0:
+		default:
+		ak4375_mi2s_sample_rate = SAMPLING_RATE_48KHZ;
+	}
+	
+	pr_debug("%s: sample_rate = %d\n", __func__, ak4375_mi2s_sample_rate);
+	return 0;
+}
+
+static int ak4375_mi2s_bit_format_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{ 
+    switch (ak4375_mi2s_bit_format) {
+    case SNDRV_PCM_FORMAT_S24_LE:
+		ucontrol->value.integer.value[0] = 1;
+		break;
+	case SNDRV_PCM_FORMAT_S16_LE:
+		default:
+		ucontrol->value.integer.value[0] = 0;
+		break;
+	}
+
+	return 0;
+}
+
+static int ak4375_mi2s_bit_format_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+    switch (ucontrol->value.integer.value[0]) {
+	case 1:
+		ak4375_mi2s_bit_format = SNDRV_PCM_FORMAT_S24_LE;
+		break;
+	case 0:
+		default:
+		ak4375_mi2s_bit_format = SNDRV_PCM_FORMAT_S16_LE;
+		break;
+	}
+
+	pr_debug("%s: bit_format = %d \n", __func__, ak4375_mi2s_bit_format);
+	return 0;
+}
+#endif
+
 static int msm_proxy_rx_ch_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
@@ -1493,6 +1651,23 @@ static struct snd_soc_ops msm_sec_auxpcm_be_ops = {
 	.shutdown = msm_sec_auxpcm_shutdown,
 };
 
+#ifdef CONFIG_SND_SOC_AK4375
+static int msm_be_ak4375_mi2s_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+	struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+		SNDRV_PCM_HW_PARAM_RATE);
+	struct snd_interval *channels = hw_param_interval(params,
+		SNDRV_PCM_HW_PARAM_CHANNELS);
+	param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
+		ak4375_mi2s_bit_format);
+	rate->min = rate->max = ak4375_mi2s_sample_rate;
+	channels->min = channels->max =2;
+	pr_debug("%s AK4375 MI2S Sample Rate =%d, bit Format = %d \n", __func__, ak4375_mi2s_sample_rate, ak4375_mi2s_bit_format);
+
+	return 0;
+}
+#else
 static int msm_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 				struct snd_pcm_hw_params *params)
 {
@@ -1506,7 +1681,117 @@ static int msm_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	channels->min = channels->max = msm_pri_mi2s_tx_ch;
 	return 0;
 }
+#endif
 
+#ifdef CONFIG_SND_SOC_AK4375
+static int msm8994_mi2s_snd_startup(struct snd_pcm_substream *substream)
+{
+	int ret = 0;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct msm8994_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	struct msm_pinctrl_info *pinctrl_info = &pdata->pinctrl_info;
+
+
+	/*OPPO 2014-10-31 MingLiu Add for AK4490 */ 
+	struct snd_soc_dai *codec_dai = rtd->codec_dai; 
+	/*OPPO 2014-10-31 MingLiu Add end */ 
+
+
+
+	pr_debug("%s: substream = %s  stream = %d\n", __func__,
+		substream->name, substream->stream);
+	pr_err("[ZTEMT]%s: dai name %s %p  substream = %s  stream = %d bit width =%d sample rate =%d	\n", __func__, cpu_dai->name, cpu_dai->dev, substream->name,
+		substream->stream, ak4375_mi2s_bit_format, ak4375_mi2s_sample_rate);
+
+
+
+	if (pinctrl_info == NULL) {
+		pr_err("%s: pinctrl_info is NULL\n", __func__);
+		ret = -EINVAL;
+		goto err;
+	}
+	if (pdata->pri_mux != NULL)
+		iowrite32(I2S_PCM_SEL_I2S << I2S_PCM_SEL_OFFSET,
+				pdata->pri_mux);
+	else
+		pr_err("%s: MI2S muxsel addr is NULL\n", __func__);
+
+	ret = msm_set_pinctrl(pinctrl_info, STATE_MI2S_ACTIVE);
+	if (ret) {
+		pr_err("%s: MI2S TLMM pinctrl set failed with %d\n",
+			__func__, ret);
+		return ret;
+	}
+
+    if(ak4375_mi2s_bit_format==SNDRV_PCM_FORMAT_S24_LE) {
+		switch(ak4375_mi2s_sample_rate) {
+			case SAMPLING_RATE_192KHZ:
+				mi2s_rx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_12_P288_MHZ;
+			case SAMPLING_RATE_96KHZ:
+				mi2s_rx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_6_P144_MHZ;
+			case SAMPLING_RATE_48KHZ:
+			default:
+				mi2s_rx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_3_P072_MHZ;
+				}
+	} else {
+		switch(ak4375_mi2s_sample_rate) {
+			case SAMPLING_RATE_192KHZ:
+			   	mi2s_rx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_6_P144_MHZ;
+			case SAMPLING_RATE_96KHZ :
+			   	mi2s_rx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_3_P072_MHZ;
+			case SAMPLING_RATE_48KHZ :
+			default:
+			   	mi2s_rx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+			   }
+    }
+
+	mi2s_rx_clk.clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
+	ret = afe_set_lpass_clock(AFE_PORT_ID_PRIMARY_MI2S_RX,
+				&mi2s_rx_clk);
+	if (ret < 0) {
+		pr_err("%s: afe lpass clock failed, err:%d\n", __func__, ret);
+		goto err;
+	}
+	ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_CBS_CFS);
+
+
+	snd_soc_dai_set_sysclk(codec_dai, 0, 12288000, 
+	SND_SOC_CLOCK_IN); 
+	
+	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_CBS_CFS | SND_SOC_DAIFMT_I2S); 
+	
+	if (ret < 0)
+		pr_err("%s: set fmt cpu dai failed, err:%d\n", __func__, ret);
+err:
+	return ret;
+}
+
+static void msm8994_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct msm8994_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	struct msm_pinctrl_info *pinctrl_info = &pdata->pinctrl_info;
+	int ret = 0;
+
+	pr_debug("%s: substream = %s  stream = %d\n", __func__,
+		substream->name, substream->stream);
+	
+	mi2s_rx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
+	mi2s_rx_clk.clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
+	ret = afe_set_lpass_clock(AFE_PORT_ID_PRIMARY_MI2S_RX,
+				&mi2s_rx_clk);
+	if (ret < 0)
+		pr_err("%s: afe lpass clock failed, err:%d\n", __func__, ret);
+
+	ret = msm_reset_pinctrl(pinctrl_info, STATE_MI2S_ACTIVE);
+	if (ret)
+		pr_err("%s: Reset pinctrl failed with %d\n",
+			__func__, ret);
+}
+#else
 static int msm8994_mi2s_snd_startup(struct snd_pcm_substream *substream)
 {
 	int ret = 0;
@@ -1574,6 +1859,7 @@ static void msm8994_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 		pr_err("%s: Reset pinctrl failed with %d\n",
 			__func__, ret);
 }
+#endif
 
 static struct snd_soc_ops msm8994_mi2s_be_ops = {
 	.startup = msm8994_mi2s_snd_startup,
@@ -1699,6 +1985,9 @@ static const struct soc_enum msm_snd_enum[] = {
 	SOC_ENUM_SINGLE_EXT(8, proxy_rx_ch_text),
 	SOC_ENUM_SINGLE_EXT(3, hdmi_rx_sample_rate_text),
 	SOC_ENUM_SINGLE_EXT(2, vi_feed_ch_text),
+#ifdef CONFIG_HEADPHONE_SWITCH
+	SOC_ENUM_SINGLE_EXT(2, headphone_switch_text),
+#endif
 };
 
 static const struct snd_kcontrol_new msm_snd_controls[] = {
@@ -1730,6 +2019,16 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			slim0_tx_bit_format_get, slim0_tx_bit_format_put),
 	SOC_ENUM_EXT("SLIM_0_TX SampleRate", msm_snd_enum[5],
 			slim0_tx_sample_rate_get, slim0_tx_sample_rate_put),
+#ifdef CONFIG_SND_SOC_AK4375
+	SOC_ENUM_EXT("AK4375_MI2S BitWidth", msm_snd_enum[4],
+	        ak4375_mi2s_bit_format_get, ak4375_mi2s_bit_format_put),
+	SOC_ENUM_EXT("AK4375_MI2S SampleRate", msm_snd_enum[5],
+	        ak4375_mi2s_sample_rate_get, ak4375_mi2s_sample_rate_put),
+#endif
+#ifdef CONFIG_HEADPHONE_SWITCH
+	SOC_ENUM_EXT("Headphone Switch",msm_snd_enum[9],
+			headphone_switch_gpio_get, headphone_switch_gpio_put),
+#endif
 };
 
 static bool msm8994_swap_gnd_mic(struct snd_soc_codec *codec)
@@ -1841,6 +2140,20 @@ static int msm_snd_get_ext_clk_cnt(void)
 	return clk_users;
 }
 
+#ifdef CONFIG_SND_SOC_AK4375
+static int msm_audrx_init_ak4375(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_soc_codec *codec = rtd->codec;
+	struct snd_soc_dapm_context *dapm = &codec->dapm;
+
+	snd_soc_dapm_ignore_suspend(dapm,"AK4375 HPL");
+	snd_soc_dapm_ignore_suspend(dapm, "AK4375 HPR");
+	snd_soc_dapm_sync(dapm);
+    return 0;
+
+}
+#endif
+
 static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 {
 	int err;
@@ -1901,6 +2214,9 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "Lineout_4 amp");
 	snd_soc_dapm_ignore_suspend(dapm, "ultrasound amp");
 	snd_soc_dapm_ignore_suspend(dapm, "Handset Mic");
+	#ifdef CONFIG_ZTEMT_AUDIO
+	snd_soc_dapm_ignore_suspend(dapm, "Sub Handset Mic");
+	#endif
 	snd_soc_dapm_ignore_suspend(dapm, "Headset Mic");
 	snd_soc_dapm_ignore_suspend(dapm, "ANCRight Headset Mic");
 	snd_soc_dapm_ignore_suspend(dapm, "ANCLeft Headset Mic");
@@ -2064,7 +2380,7 @@ static void *def_codec_mbhc_cal(void)
 #undef S
 #define S(X, Y) ((WCD9XXX_MBHC_CAL_PLUG_TYPE_PTR(codec_cal)->X) = (Y))
 	S(v_no_mic, 30);
-	S(v_hs_max, 2400);
+	S(v_hs_max, 3000);
 #undef S
 #define S(X, Y) ((WCD9XXX_MBHC_CAL_BTN_DET_PTR(codec_cal)->X) = (Y))
 	S(c[0], 62);
@@ -3189,6 +3505,22 @@ static struct snd_soc_dai_link msm8994_common_dai_links[] = {
 		.be_hw_params_fixup = msm_be_hw_params_fixup,
 		.ignore_suspend = 1,
 	},
+#ifdef CONFIG_SND_SOC_AK4375
+    { 
+        .name = LPASS_BE_PRI_MI2S_RX,
+        .stream_name = "Primary MI2S Playback",
+        .cpu_dai_name = "msm-dai-q6-mi2s.0",
+        .platform_name = "msm-pcm-routing",
+        .codec_name = "ak4375.6-0010",
+        .codec_dai_name = "ak4375-AIF1",
+        .no_pcm = 1,
+        .be_id = MSM_BACKEND_DAI_PRI_MI2S_RX,
+        .init = &msm_audrx_init_ak4375,
+        .be_hw_params_fixup = msm_be_ak4375_mi2s_hw_params_fixup,
+        .ops = &msm8994_mi2s_be_ops,
+        .ignore_suspend = 1,
+    }
+#else
 	{
 		.name = LPASS_BE_PRI_MI2S_TX,
 		.stream_name = "Primary MI2S Capture",
@@ -3202,6 +3534,7 @@ static struct snd_soc_dai_link msm8994_common_dai_links[] = {
 		.ops = &msm8994_mi2s_be_ops,
 		.ignore_suspend = 1,
 	}
+#endif
 };
 
 static struct snd_soc_dai_link msm8994_hdmi_dai_link[] = {
@@ -3503,6 +3836,22 @@ static int msm8994_asoc_machine_probe(struct platform_device *pdev)
 			"qcom,us-euro-gpios", pdata->us_euro_gpio);
 		mbhc_cfg.swap_gnd_mic = msm8994_swap_gnd_mic;
 	}
+
+#ifdef CONFIG_HEADPHONE_SWITCH
+    headphone_switch_gpio = of_get_named_gpio(pdev->dev.of_node,"qcom,headphone-switch-gpio", 0);
+    if (ext_us_amp_gpio >= 0) {
+        ret = gpio_request(headphone_switch_gpio, "headphone_gpio");
+        if (ret) {
+            pr_err("%s: headphone_switch_gpio request failed, ret:%d\n",
+                    __func__, ret);
+        } else {
+            gpio_direction_output(headphone_switch_gpio, 0);
+            printk("headphone_switch_gpio is default value %d\n",gpio_get_value(headphone_switch_gpio));
+        }
+    } else {
+        pr_err("qcom,headphone-switch-gpio has no .........\n");
+    }
+#endif
 
 	ret = msm8994_prepare_us_euro(card);
 	if (ret)

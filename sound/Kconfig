@@ -132,3 +132,9 @@ config AC97_BUS
 	  sound subsystem and other function drivers completely unrelated to
 	  sound although they're sharing the AC97 bus. Concerned drivers
 	  should "select" this.
+#add by zmwu
+config ZTEMT_AUDIO
+       bool "AUDIO MACRO for ZTEMT NX510J and NX518J"
+       default n
+       help
+          AUDIO MACRO for ZTEMT NX510J and NX518J

@@ -297,6 +297,14 @@ config LEDS_QPNP
 	  To compile this driver as a module, choose M here: the module will
 	  be called leds-qpnp.
 
+config LEDS_QPNP_PMI
+	tristate "Support for QPNP LEDs"
+	depends on SPMI && OF_SPMI
+	help
+	  This driver supports the leds functionality of Qualcomm PNP PMIC.  It
+	  includes RGB Leds, WLED and Flash Led.
+	  To compile this driver as a module, choose M here: the module will
+	  be called leds-qpnp.
 config LEDS_QPNP_FLASH
 	tristate "Support for QPNP Flash LEDs"
 	depends on SPMI && OF_SPMI
@@ -524,6 +532,29 @@ config LEDS_AW2013
 	help
 	  This option enables support for the AW2013 RGB LED connected
 	  through I2C. Say Y to enable support for the AW2013 LED.
+
+config ZTEMT_RGB_BREATH_LEDS
+	tristate "LED support for ZTEMT BREATH LED"
+	depends on LEDS_CLASS
+	default y
+	help
+	  This option enables support for the ZTEMT RGB LED connected
+	  Say Y to enable support for the ZTEMT LED.
+config ZTEMT_LED_DEBUG
+	tristate "LED support for ZTEMT BREATH LED DEBUG"
+	depends on LEDS_CLASS
+	default y
+	help
+	  This option enables support for the ZTEMT RGB LED DEBUG
+	  Say Y to enable support for the ZTEMT LED.
+
+config ZTEMT_BREATH_LEDS
+	tristate "LED support for ZTEMT BREATH LED"
+	depends on LEDS_CLASS
+	default y
+	help
+	  This option enables support for the ZTEMT RGB LED connected
+	  Say Y to enable support for the ZTEMT LED.
 
 comment "LED Triggers"
 source "drivers/leds/trigger/Kconfig"

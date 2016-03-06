@@ -86,7 +86,11 @@ snd-soc-msm8909-objs := msm8x16.o
 obj-$(CONFIG_SND_SOC_MSM8909) += snd-soc-msm8909.o
 
 # for MSM 8994 sound card driver
+ifdef CONFIG_AK4961_CODEC
+snd-soc-msm8994-objs := msm8994-ak4961.o
+else
 snd-soc-msm8994-objs := msm8994.o
+endif
 obj-$(CONFIG_SND_SOC_MSM8994) += snd-soc-msm8994.o
 
 # for MDM9640 sound card driver

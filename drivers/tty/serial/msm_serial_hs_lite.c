@@ -94,6 +94,10 @@ struct msm_hsl_port {
 	u32			bus_perf_client;
 	/* BLSP UART required BUS Scaling data */
 	struct msm_bus_scale_pdata *bus_scale_table;
+	bool use_pinctrl;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *gpio_state_active;
+	struct pinctrl_state *gpio_state_suspend;
 };
 
 #define UARTDM_VERSION_11_13	0
@@ -974,6 +978,48 @@ static void msm_hsl_deinit_clock(struct uart_port *port)
 	clk_en(port, 0);
 }
 
+static void msm_hsl_get_pinctrl_configs(struct uart_port *uport)
+{
+	struct pinctrl_state *set_state;
+	struct msm_hsl_port *msm_hsl_port = UART_TO_MSM(uport);
+
+	msm_hsl_port->pinctrl = devm_pinctrl_get(uport->dev);
+	if (IS_ERR_OR_NULL(msm_hsl_port->pinctrl)) {
+		pr_debug("%s(): Pinctrl not defined", __func__);
+	} else {
+		pr_debug("%s(): Using Pinctrl", __func__);
+		msm_hsl_port->use_pinctrl = true;
+
+		set_state = pinctrl_lookup_state(msm_hsl_port->pinctrl,
+						PINCTRL_STATE_DEFAULT);
+		if (IS_ERR_OR_NULL(set_state)) {
+			dev_err(uport->dev,
+				"pinctrl lookup failed for default state");
+			goto pinctrl_fail;
+		}
+
+		pr_debug("%s(): Pinctrl state active %p\n", __func__,
+			set_state);
+		msm_hsl_port->gpio_state_active = set_state;
+
+		set_state = pinctrl_lookup_state(msm_hsl_port->pinctrl,
+						PINCTRL_STATE_SLEEP);
+		if (IS_ERR_OR_NULL(set_state)) {
+			dev_err(uport->dev,
+				"pinctrl lookup failed for sleep state");
+			goto pinctrl_fail;
+		}
+
+		pr_debug("%s(): Pinctrl state sleep %p\n", __func__,
+			set_state);
+		msm_hsl_port->gpio_state_suspend = set_state;
+		return;
+	}
+pinctrl_fail:
+	msm_hsl_port->pinctrl = NULL;
+	return;
+}
+
 static int msm_hsl_startup(struct uart_port *port)
 {
 	struct msm_hsl_port *msm_hsl_port = UART_TO_MSM(port);
@@ -1001,6 +1047,16 @@ static int msm_hsl_startup(struct uart_port *port)
 			ret = msm_hsl_config_uart_gpios(port);
 			if (ret) {
 				msm_hsl_unconfig_uart_gpios(port);
+				goto release_wakelock;
+			}
+		} else if (pdata && !IS_ERR_OR_NULL(msm_hsl_port->pinctrl)) {
+			pr_debug("%s(): Using Pinctrl", __func__);
+			msm_hsl_port->use_pinctrl = true;
+			ret = pinctrl_select_state(msm_hsl_port->pinctrl,
+					msm_hsl_port->gpio_state_active);
+			if (ret) {
+				pr_err("%s(): Failed to pinctrl set_state",
+					__func__);
 				goto release_wakelock;
 			}
 		}
@@ -1734,6 +1790,8 @@ static int msm_serial_hsl_probe(struct platform_device *pdev)
 	port->uartclk = 7372800;
 	msm_hsl_port = UART_TO_MSM(port);
 
+	msm_hsl_get_pinctrl_configs(port);
+
 	msm_hsl_port->clk = clk_get(&pdev->dev, "core_clk");
 	if (unlikely(IS_ERR(msm_hsl_port->clk))) {
 		ret = PTR_ERR(msm_hsl_port->clk);
@@ -1879,14 +1937,26 @@ static int msm_serial_hsl_remove(struct platform_device *pdev)
 #ifdef CONFIG_PM
 static int msm_serial_hsl_suspend(struct device *dev)
 {
+	int ret;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct uart_port *port;
+	struct msm_hsl_port *msm_hsl_port;
 	port = get_port_from_line(get_line(pdev));
+	msm_hsl_port = UART_TO_MSM(port);
 
 	if (port) {
 
 		if (is_console(port))
 			msm_hsl_deinit_clock(port);
+		else {
+			if (msm_hsl_port->pinctrl) {
+				ret = pinctrl_select_state(msm_hsl_port->pinctrl,
+					msm_hsl_port->gpio_state_suspend);
+				if (ret)
+					pr_err("%s(): Error selecting suspend state",
+						__func__);
+			}
+		}
 
 		uart_suspend_port(&msm_hsl_uart_driver, port);
 		if (device_may_wakeup(dev))
@@ -1898,9 +1968,12 @@ static int msm_serial_hsl_suspend(struct device *dev)
 
 static int msm_serial_hsl_resume(struct device *dev)
 {
+	int ret;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct uart_port *port;
+	struct msm_hsl_port *msm_hsl_port;
 	port = get_port_from_line(get_line(pdev));
+	msm_hsl_port = UART_TO_MSM(port);
 
 	if (port) {
 
@@ -1910,6 +1983,15 @@ static int msm_serial_hsl_resume(struct device *dev)
 
 		if (is_console(port))
 			msm_hsl_init_clock(port);
+		else {
+			if (msm_hsl_port->pinctrl) {
+				ret = pinctrl_select_state(msm_hsl_port->pinctrl,
+					msm_hsl_port->gpio_state_active);
+				if (ret)
+					pr_err("%s(): Error selecting active state",
+						__func__);
+				}
+		}
 	}
 
 	return 0;

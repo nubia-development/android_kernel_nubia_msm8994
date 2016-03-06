@@ -306,7 +306,13 @@ int __pil_mss_deinit_image(struct pil_desc *pil, bool err_path)
 
 	/* In case of any failure where reclaim MBA memory
 	 * could not happen, free the memory here */
-	if (drv->q6->mba_virt)
+    if(system_state == SYSTEM_RESTART
+                      || system_state == SYSTEM_POWER_OFF)
+              {
+                pr_err("Leaking MBA memory to protect access during lockeddown\n");
+        return ret;
+    }
+    if (drv->q6->mba_virt)
 		dma_free_attrs(&drv->mba_mem_dev, drv->q6->mba_size,
 				drv->q6->mba_virt, drv->q6->mba_phys,
 				&drv->attrs_dma);

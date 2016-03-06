@@ -1577,6 +1577,139 @@ config SENSORS_MC13783_ADC
         help
           Support for the A/D converter on MC13783 and MC13892 PMIC.
 
+################################################# SENROS START
+menuconfig ZTEMT_SENSORS
+	tristate "ZTEMT ZTEMT_SENSORS"
+	default n
+
+if ZTEMT_SENSORS
+
+	config FEATURE_ZTEMT_SENSORS_LOG_ON
+	tristate "ZTEMT SENSORS LOG ON"
+	depends on ZTEMT_SENSORS
+	default n
+	help
+		If you want to enable the sensor log,
+		then choose this config
+
+################################################# SENSOR_COMMON START
+	config ZTEMT_SENSORS_COMMON
+	tristate "ZTEMT SENSORS COMMON"
+	depends on ZTEMT_SENSORS
+	default n
+	help
+		If you want to enable the sensor common,
+		then choose this config
+################################################# SENSOR_COMMON END
+
+################################################# ALS_PS START
+menuconfig ZTEMT_SENSORS_ALS_PS
+	tristate "ZTEMT ALS and PS"
+	default n
+
+if ZTEMT_SENSORS_ALS_PS
+
+config ZTEMT_SENSORS_ALS_PS_AUTO_DETECT
+	tristate "ALS_PS_SENSOR auto detect"
+	depends on ZTEMT_SENSORS_ALS_PS
+	help
+	  If you say yes here,the ALS_PS_SENSOR is auto detect
+
+config ZTEMT_SENSORS_ALS_PS_TMG3993
+	tristate "TMG3993 device driver"
+	depends on ZTEMT_SENSORS_ALS_PS
+	help
+	  If you say yes here you get support for AMS's
+	  als ps TMG3993
+
+config ZTEMT_SENSORS_ALS_PS_TMD2772
+	tristate "TMD2772 device driver"
+	depends on ZTEMT_SENSORS_ALS_PS
+	help
+	  If you say yes here you get support for AMS's
+	  als ps TMD2772
+
+endif
+################################################# ALS_PS END
+
+
+################################################# TEMP_HUMI START
+menuconfig ZTEMT_SENSORS_TEMP_HUMI
+	tristate "ZTEMT TEMP and HUMI"
+	default n
+
+if ZTEMT_SENSORS_TEMP_HUMI
+
+config ZTEMT_SENSORS_TEMP_HUMI_SHTC1
+	tristate "SHTC1 device driver"
+	depends on ZTEMT_SENSORS_TEMP_HUMI
+	help
+	  If you say yes here you get support for Sensirion's
+	  als ps SHTC1
+endif
+################################################# ALS_PS END
+
+
+################################################# IR REMOTE START
+menuconfig ZTEMT_SENSORS_IR_REMOTE
+	tristate "ZTEMT IR REMOTE CONTROL"
+	default n
+
+if ZTEMT_SENSORS_IR_REMOTE
+
+config ZTEMT_SENSORS_IR_REMOTE_I_TWO
+	tristate "I_TWO device driver"
+	depends on ZTEMT_SENSORS_IR_REMOTE
+	help
+	  If you say yes here you get support for UEI's
+	  IR Remote control i_two
+
+endif
+################################################# IR REMOTE END
+
+################################################# HALL_DEVICE START
+menuconfig ZTEMT_SENSORS_HALL_DEVICE
+	tristate "ZTEMT HALL DEVICE"
+	default n
+
+if ZTEMT_SENSORS_HALL_DEVICE
+
+config ZTEMT_SENSORS_HALL_DEVICE_SIGNLE_OUT
+	tristate "signle out hell device driver"
+	depends on ZTEMT_SENSORS_HALL_DEVICE
+	help
+	  If you say yes here you get support for zte's
+	  signle out hell device
+
+config ZTEMT_SENSORS_HALL_DEVICE_PAIR_OUT
+	tristate "pair out hell device driver"
+	depends on ZTEMT_SENSORS_HALL_DEVICE
+	help
+	  If you say yes here you get support for zte's
+	  pair out hell device
+endif
+################################################# HALL_DEVICE END
+
+################################################# PRESSURE_DEVICE START
+config ZTEMT_SENSORS_PRESSURE_DEVICE
+	tristate "support pressure device driver"
+	help
+		nubia pressure device
+################################################# PRESSURE_DEVICE END
+################################################# FINGER_PRINTER START
+menuconfig ZTEMT_SENSORS_FP
+	tristate "ZTEMT FP DEVICE"
+	default n
+
+if ZTEMT_SENSORS_FP
+
+source drivers/hwmon/et310/Kconfig
+
+endif
+################################################# FINGER_PRINTER END
+
+endif
+################################################# SENROS END
 if ACPI
 
 comment "ACPI drivers"

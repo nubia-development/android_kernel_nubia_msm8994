@@ -28,6 +28,7 @@
 #include "mdss_panel.h"
 #include "mdss_dsi.h"
 #include "mdss_debug.h"
+#include "zte_disp_enhance.h"
 
 #define XO_CLK_RATE	19200000
 
@@ -169,7 +170,13 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
 		ret = 0;
 	}
-
+	
+#ifdef CONFIG_ZTEMT_LCD_1080P_R63315_SHARP_IPS_5P0
+		mdelay(15);
+#elif defined CONFIG_ZTEMT_MIPI_1080P_R63417_SHARP_IPS_5P5
+		mdelay(10);
+#endif
+	
 	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
 		pr_debug("reset disable: pinctrl not enabled\n");
 
@@ -179,7 +186,13 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 		if (mdss_dsi_labibb_vreg_ctrl(ctrl_pdata, false))
 			pr_err("Unable to disable bias vreg\n");
 		/* Add delay recommended by panel specs */
+#ifdef CONFIG_ZTEMT_MIPI_1080P_R63417_SHARP_IPS_5P5
+		mdelay(10);
+#elif defined CONFIG_ZTEMT_LCD_1080P_R63315_SHARP_IPS_5P0
+		mdelay(70);
+#else
 		udelay(2000);
+#endif
 	}
 
 	for (i = DSI_MAX_PM - 1; i >= 0; i--) {
@@ -196,6 +209,9 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 			pr_err("%s: failed to disable vregs for %s\n",
 				__func__, __mdss_dsi_pm_name(i));
 	}
+#ifdef CONFIG_ZTEMT_LCD_1080P_R63315_SHARP_IPS_5P0
+		mdelay(10);
+#endif
 
 end:
 	return ret;
@@ -231,13 +247,24 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 			goto error;
 		}
 	}
+#ifdef CONFIG_ZTEMT_LCD_1080P_R63315_SHARP_IPS_5P0
+		mdelay(40);
+#elif defined CONFIG_ZTEMT_MIPI_1080P_R63417_SHARP_IPS_5P5
+		mdelay(10);
+#endif
 	if (ctrl_pdata->panel_bias_vreg) {
 		pr_debug("%s: Enable panel bias vreg. ndx = %d\n",
 		       __func__, ctrl_pdata->ndx);
 		if (mdss_dsi_labibb_vreg_ctrl(ctrl_pdata, true))
 			pr_err("Unable to configure bias vreg\n");
 		/* Add delay recommended by panel specs */
+#ifdef CONFIG_ZTEMT_LCD_1080P_R63315_SHARP_IPS_5P0
+		mdelay(50);
+#elif defined CONFIG_ZTEMT_MIPI_1080P_R63417_SHARP_IPS_5P5
+		mdelay(10);
+#else
 		udelay(2000);
+#endif
 	}
 
 	i--;
@@ -257,6 +284,10 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 		if (ret)
 			pr_err("%s: Panel reset failed. rc=%d\n",
 					__func__, ret);
+#ifdef CONFIG_ZTEMT_MIPI_1080P_R63417_SHARP_IPS_5P5
+		mdelay(10);
+#endif
+
 	}
 
 error:
@@ -886,6 +917,10 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 		}
 		ctrl_pdata->ctrl_state |= CTRL_STATE_PANEL_INIT;
 	}
+#ifdef CONFIG_ZTEMT_LCD_DISP_ENHANCE
+	pr_err("%s:\n", __func__);
+		zte_boot_begin_enhance(ctrl_pdata);
+#endif
 
 	if ((pdata->panel_info.type == MIPI_CMD_PANEL) &&
 		mipi->vsync_enable && mipi->hw_vsync_mode) {

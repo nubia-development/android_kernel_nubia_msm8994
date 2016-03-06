@@ -18,9 +18,32 @@
 #include <linux/regulator/rpm-smd-regulator.h>
 #include <linux/regulator/consumer.h>
 
+// ZTEMT: fuyipeng add for setBacklight -----start
+#include "../../../../../../video/msm/mdss/mdss_fb.h"
+extern struct msm_fb_data_type *zte_camera_mfd;
+static int pre_bl_level = 0;
+// ZTEMT: fuyipeng add for setBacklight -----end
+
+/*ZTEMT added for flashlight time optimize--start*/
+static bool ois_init = false;
+static bool enable_ois = true;
+static bool enable_ois_still = false;
+static bool enable_ois_movie = false;
+static bool check_imx234_id = true;
+
+/*ZTEMT added for flashlight time optimize--end*/
+
+
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
-
+/*ZTEMT:wangkai add sharp ois af driver-----Start*/
+#ifdef CONFIG_IMX234_OIS_SHARP
+extern void imx234_ois_otp_ois_sharp(void);
+extern void zte_read_otp_imx234_ois_sharp(struct msm_sensor_ctrl_t* s_ctrl);
+extern int zte_adaptive_imx234_ois_sharp(struct msm_sensor_ctrl_t* s_ctrl);
+unsigned char macro_limit_flag = 0x0;
+#endif
+/*ZTEMT:wangkai add sharp ois af driver-----End*/
 static struct v4l2_file_operations msm_sensor_v4l2_subdev_fops;
 static void msm_sensor_adjust_mclk(struct msm_camera_power_ctrl_t *ctrl)
 {
@@ -443,6 +466,7 @@ int msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 			__func__, __LINE__, s_ctrl);
 		return -EINVAL;
 	}
+        ois_init  =  false;
 
 	power_info = &s_ctrl->sensordata->power_info;
 	sensor_device_type = s_ctrl->sensor_device_type;
@@ -493,7 +517,15 @@ int msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 			sensor_i2c_client);
 		if (rc < 0)
 			return rc;
-		rc = msm_sensor_check_id(s_ctrl);
+	/*ZTEMT:houyujun opt open time -----Start*/
+
+         if(check_imx234_id ||strncmp(s_ctrl->sensordata->sensor_name, "imx234", 32))
+          {
+                    rc = msm_sensor_check_id(s_ctrl);
+          }
+
+         /*ZTEMT:houyujun opt open time -----end*/
+
 		if (rc < 0) {
 			msm_camera_power_down(power_info,
 				s_ctrl->sensor_device_type, sensor_i2c_client);
@@ -549,6 +581,67 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 			sensor_name);
 		return -EINVAL;
 	}
+	/*ZTEMT:wangkai add sharp ois driver-----Start*/
+    #ifdef CONFIG_IMX234_OIS_SHARP
+	if (!strncmp(s_ctrl->sensordata->sensor_name, "imx234", 32)) {
+		uint16_t times = 2;
+		rc = sensor_i2c_client->i2c_func_tbl->i2c_write(
+			sensor_i2c_client, 0x0A02, 0x1F, MSM_CAMERA_I2C_BYTE_DATA);
+		msleep(3);
+		if (rc < 0)
+			pr_err("%s write OTP error %d\n", __func__, __LINE__);
+		rc = sensor_i2c_client->i2c_func_tbl->i2c_write(
+			sensor_i2c_client, 0x0A00, 0x01, MSM_CAMERA_I2C_BYTE_DATA);
+		msleep(3);
+		if (rc < 0)
+			pr_err("%s write OTP error %d\n", __func__, __LINE__);
+		while (chipid != 0x01) {
+		msleep(5);
+			rc = sensor_i2c_client->i2c_func_tbl->i2c_read(
+				sensor_i2c_client, 0x0A01,
+				&chipid, MSM_CAMERA_I2C_WORD_DATA);
+			if (rc < 0)
+				pr_err("%s read OTP error %d\n", __func__, __LINE__);
+			chipid &= 0x1;
+			pr_err("%s imx234 OTP status=%d\n",__func__, chipid);
+			times--;
+			if (times == 0) {
+				pr_err("%s imx234 OTP status error\n",__func__);
+				break;
+			}
+		}
+	}
+    #endif
+	/*ZTEMT:wangkai add sharp ois af driver-----End*/
+	#ifdef CONFIG_IMX234_AF
+	if (!strncmp(s_ctrl->sensordata->sensor_name, "imx234_af", 32)) {
+		uint16_t times = 2;
+		rc = sensor_i2c_client->i2c_func_tbl->i2c_write(
+			sensor_i2c_client, 0x0A02, 0x1F, MSM_CAMERA_I2C_BYTE_DATA);
+		msleep(1);
+		if (rc < 0)
+			pr_err("%s write OTP error %d\n", __func__, __LINE__);
+		rc = sensor_i2c_client->i2c_func_tbl->i2c_write(
+			sensor_i2c_client, 0x0A00, 0x01, MSM_CAMERA_I2C_BYTE_DATA);
+		msleep(1);
+		if (rc < 0)
+			pr_err("%s write OTP error %d\n", __func__, __LINE__);
+		while (chipid != 0x01) {
+			rc = sensor_i2c_client->i2c_func_tbl->i2c_read(
+				sensor_i2c_client, 0x0A01,
+				&chipid, MSM_CAMERA_I2C_WORD_DATA);
+			if (rc < 0)
+				pr_err("%s read OTP error %d\n", __func__, __LINE__);
+			chipid &= 0x1;
+			pr_err("%s imx234 OTP status=%d\n",__func__, chipid);
+			times--;
+			if (times == 0) {
+				pr_err("%s imx234 OTP status error\n",__func__);
+				break;
+			}
+		}
+	}
+       #endif
 
 	rc = sensor_i2c_client->i2c_func_tbl->i2c_read(
 		sensor_i2c_client, slave_info->sensor_id_reg_addr,
@@ -557,13 +650,60 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 		pr_err("%s: %s: read id failed\n", __func__, sensor_name);
 		return rc;
 	}
+	/*ZTEMT:wangkai add sharp ois driver-----Start*/
+	#ifdef CONFIG_IMX234_OIS_SHARP
+	
+	if (!strncmp(s_ctrl->sensordata->sensor_name, "imx234", 32)) {
+        chipid >>=4;
+        /*ZTEMT added for flashlight time optimize--start*/
+        #if 0
+		rc = zte_adaptive_imx234_ois_sharp(s_ctrl);
+		if (rc < 0) {
+			pr_err("%s zte_adaptive_sensor imx234_ois_sharp failed\n", __func__);
+			return rc;
+		}
+		
+		imx234_ois_otp_ois_sharp();
+		zte_read_otp_imx234_ois_sharp(s_ctrl);
+		macro_limit_flag = 0x1;
+		printk("k_debug after go to imx234 = %x\n",chipid);
+        #endif
+        /*ZTEMT added for flashlight time optimize--end*/
 
+	}
+    #endif
+	/*ZTEMT:wangkai add sharp ois driver-----End*/
+	#ifdef CONFIG_IMX234_AF
+	if (!strncmp(s_ctrl->sensordata->sensor_name, "imx234_af", 32)) {
+		chipid >>=4;
+		printk("k_debug IMX234 AF module go to imx234 = %x\n",chipid);
+	}
+       #endif
+
+
+       #ifdef CONFIG_IMX179
+       if (!strncmp(s_ctrl->sensordata->sensor_name, "imx179", 32)) {
+              chipid >>=8;
+		//printk("k_debug go to imx179 chipid = %d\n",chipid);
+       }
+       #endif
 	CDBG("%s: read id: 0x%x expected id 0x%x:\n", __func__, chipid,
+		slave_info->sensor_id);
+	printk("%s:k_debug read id: 0x%x expected id 0x%x:\n", __func__, chipid,
 		slave_info->sensor_id);
 	if (msm_sensor_id_by_mask(s_ctrl, chipid) != slave_info->sensor_id) {
 		pr_err("msm_sensor_match_id chip id doesnot match\n");
 		return -ENODEV;
 	}
+
+	/*ZTEMT:houyujun opt open time -----Start*/
+
+	if (!strncmp(s_ctrl->sensordata->sensor_name, "imx234", 32)) {
+ 
+                    check_imx234_id  =false;
+       }
+	/*ZTEMT:houyujun opt open time -----end*/
+
 	return rc;
 }
 
@@ -663,6 +803,47 @@ long msm_sensor_subdev_fops_ioctl(struct file *file,
 	return video_usercopy(file, cmd, arg, msm_sensor_subdev_do_ioctl);
 }
 
+// ZTEMT: fuyipeng add for setBacklight -----start
+static void zte_camera_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
+{
+	struct mdss_panel_data *pdata;
+	
+      if (NULL == mfd)
+      	{
+      	    pr_err("zte_camera_backlight mfd = NULL!\n");
+      	    return;
+      	}
+
+	pdata = dev_get_platdata(&mfd->pdev->dev);	
+      if (NULL == pdata)
+      	{
+      	    pr_err("zte_camera_backlight pdata = NULL!\n");
+      	    return;
+      	}
+	
+	printk("%s bl_max=%d bl_level=%d in \n", __func__, pdata->panel_info.bl_max, mfd->bl_level);
+
+	if (0 == bkl_lvl && mfd->bl_level != 0)
+	{
+	      pre_bl_level = mfd->bl_level;
+		pdata->set_backlight(pdata, 0);
+	}
+	else if (1 == bkl_lvl && pre_bl_level != 0)
+	{
+	      pdata->set_backlight(pdata, pre_bl_level);
+	      pre_bl_level = 0;
+	}
+	
+}
+// ZTEMT: fuyipeng add for setBacklight -----end
+
+//ZTEMT:wangkai add for OIS menu----Start
+#ifdef CONFIG_IMX234_OIS_SHARP
+extern unsigned char RtnCen(unsigned char	UcCmdPar);
+extern void OisEna(void);
+extern void	SetH1cMod( unsigned char	UcSetNum );
+#endif
+//ZTEMT:wangkai add for OIS menu----End
 static int msm_sensor_config32(struct msm_sensor_ctrl_t *s_ctrl,
 	void __user *argp)
 {
@@ -708,6 +889,55 @@ static int msm_sensor_config32(struct msm_sensor_ctrl_t *s_ctrl,
 			cdata->cfg.sensor_info.sensor_mount_angle);
 
 		break;
+        /*ZTEMT added for flashlight time optimize--start*/
+
+        case CFG_OIS_INT:
+            //printk("==== CFG_OIS_INT  : ois_init%d \n",ois_init);
+            #ifdef CONFIG_IMX234_OIS_SHARP
+	      if ((!strncmp(s_ctrl->sensordata->sensor_name, "imx234", 32)) && !ois_init){
+		ois_init = true;
+		rc = zte_adaptive_imx234_ois_sharp(s_ctrl);
+		if (rc < 0) {
+			pr_err("%s zte_adaptive_sensor imx234_ois_sharp failed\n", __func__);
+                        rc = 0;
+			//return rc;
+		}else{
+		      macro_limit_flag = 0x1;
+                }
+		imx234_ois_otp_ois_sharp();
+		zte_read_otp_imx234_ois_sharp(s_ctrl);
+                if(enable_ois)
+                    OisEna();
+                else
+                    RtnCen(0x00);
+
+                if(enable_ois_still)
+                    SetH1cMod(0x00);
+
+                if(enable_ois_movie)
+                    SetH1cMod(0xFF);
+
+		printk("k_debug after go to imx234 \n");
+        
+	       }          
+                #endif
+               break;
+
+          /*ZTEMT added for flashlight time optimize--end*/
+
+	// ZTEMT: fuyipeng add for setBacklight -----start
+	case CFG_SET_ZTE_BACKLIGHT:
+	{
+             int32_t level = 0;
+             if (copy_from_user(&level, (void *)compat_ptr(cdata->cfg.setting),
+             	sizeof(int32_t))) {
+             	pr_err("%s:%d failed\n", __func__, __LINE__);
+             	break;
+             }
+		zte_camera_backlight(zte_camera_mfd, level);
+	       break;
+	}
+      // ZTEMT: fuyipeng add for setBacklight -----end
 	case CFG_GET_SENSOR_INIT_PARAMS:
 		cdata->cfg.sensor_init_params.modes_supported =
 			s_ctrl->sensordata->sensor_info->modes_supported;
@@ -981,6 +1211,55 @@ static int msm_sensor_config32(struct msm_sensor_ctrl_t *s_ctrl,
 		}
 		break;
 	}
+    //ZTEMT:wangkai add for OIS menu----Start
+	case CFG_ENABLE_OIS: {
+                enable_ois = true;
+                if(!ois_init)
+                    break;
+		#ifdef CONFIG_IMX234_OIS_SHARP
+		OisEna();
+		#endif
+		break;
+	}
+
+    case CFG_DISABLE_OIS: {
+            enable_ois = false;
+            if(!ois_init)
+                break;
+            
+		#ifdef CONFIG_IMX234_OIS_SHARP
+		RtnCen(0x00);
+		#endif
+		break;	
+	}
+	//ZTEMT:wangkai add for OIS menu----End
+	//ZTEMT:wangkai add for OIS control----Start
+	case CFG_ENABLE_OIS_STILL_MODE: {
+                enable_ois_still = true;
+                        
+                if(!ois_init)
+                    break;
+                
+		#ifdef CONFIG_IMX234_OIS_SHARP
+		SetH1cMod(0x00);
+		//printk(" CFG_ENABLE_OIS_STILL_MODE\n");
+		#endif
+		break;
+	}
+
+    case CFG_ENABLE_OIS_MOVIE_MODE: {
+              enable_ois_movie = true;
+
+              if(!ois_init)
+                    break;
+              
+		#ifdef CONFIG_IMX234_OIS_SHARP
+		SetH1cMod(0xFF);  
+		//printk("CFG_ENABLE_OIS_MOVIE_MODE\n");
+		#endif
+		break;	
+	}
+	//ZTEMT:wangkai add for OIS control----End
 
 	default:
 		rc = -EFAULT;

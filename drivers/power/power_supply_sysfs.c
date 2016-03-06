@@ -143,6 +143,9 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(health),
 	POWER_SUPPLY_ATTR(present),
 	POWER_SUPPLY_ATTR(online),
+	#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	POWER_SUPPLY_ATTR(usb_present),
+	#endif
 	POWER_SUPPLY_ATTR(authentic),
 	POWER_SUPPLY_ATTR(battery_charging_enabled),
 	POWER_SUPPLY_ATTR(charging_enabled),

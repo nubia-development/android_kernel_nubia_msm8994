@@ -271,9 +271,11 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 	}
 }
 
+#define MDSS_DEFAULT_BL_BRIGHTNESS 61
 static struct led_classdev backlight_led = {
 	.name           = "lcd-backlight",
-	.brightness     = MDSS_MAX_BL_BRIGHTNESS,
+	//.brightness     = MDSS_MAX_BL_BRIGHTNESS,
+	.brightness     = MDSS_DEFAULT_BL_BRIGHTNESS,
 	.brightness_set = mdss_fb_set_bl_brightness,
 	.max_brightness = MDSS_MAX_BL_BRIGHTNESS,
 };
@@ -998,7 +1000,11 @@ static int mdss_fb_probe(struct platform_device *pdev)
 
 	/* android supports only one lcd-backlight/lcd for now */
 	if (!lcd_backlight_registered) {
+	#ifndef CONFIG_ZTEMT_LCD_BRIGHTNESS_COMMON
 		backlight_led.brightness = mfd->panel_info->brightness_max;
+	#else
+		backlight_led.brightness = MDSS_DEFAULT_BL_BRIGHTNESS;
+	#endif
 		backlight_led.max_brightness = mfd->panel_info->brightness_max;
 		if (led_classdev_register(&pdev->dev, &backlight_led))
 			pr_err("led_classdev_register failed\n");
@@ -1326,6 +1332,10 @@ static void mdss_fb_scale_bl(struct msm_fb_data_type *mfd, u32 *bl_lvl)
 	(*bl_lvl) = temp;
 }
 
+//ZTEMT: fuyipeng added for camera control backlight -----start
+struct msm_fb_data_type *zte_camera_mfd;
+//ZTEMT: fuyipeng added for camera control backlight -----end
+
 /* must call this function from within mfd->bl_lock */
 void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 {
@@ -1344,6 +1354,10 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	} else {
 		mfd->unset_bl_level = 0;
 	}
+
+      //ZTEMT: fuyipeng added for camera control backlight -----start
+      zte_camera_mfd = mfd;
+      //ZTEMT: fuyipeng added for camera control backlight -----end
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 
@@ -1404,6 +1418,9 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 			pdata->set_backlight(pdata, temp);
 			mfd->bl_level_scaled = mfd->unset_bl_level;
 			mfd->bl_updated = 1;
+                   //ZTEMT: fuyipeng added for camera control backlight -----start
+                   zte_camera_mfd = mfd;
+                   //ZTEMT: fuyipeng added for camera control backlight -----end
 		}
 	}
 	mutex_unlock(&mfd->bl_lock);

@@ -10,6 +10,24 @@ config SENSORS_LIS3LV02D
 	select INPUT_POLLDEV
 	default n
 
+config LM5802
+	tristate "Texas Instruments LM5802 Driver"
+	select FW_LOADER
+	help
+	  Say Y here if you use TI LM5802 as a system wake up device.
+	  LM5802 provides a programmable voice wake up solution.
+	  Firmware is used for system wide voice detection.
+	  LM5802 supports up to four programmable voice detection.
+	  Driver includes the sysfs attributes for user configuration.
+
+config TPS65132
+	tristate "Texas Instruments TPS65132 Driver"
+	help
+
+
+config FSA8069
+	tristate " FAS8069 Driver"
+
 config AD525X_DPOT
 	tristate "Analog Devices Digital Potentiometers"
 	depends on (I2C || SPI) && SYSFS
@@ -197,6 +215,12 @@ config ICS932S401
 
 	  This driver can also be built as a module. If so, the module
 	  will be called ics932s401.
+
+config TI_USBTYPE_C 
+	tristate "Integrated Circuits TI USB TYPE C"
+	depends on I2C
+	help
+	   support usb type c.
 
 config ATMEL_SSC
 	tristate "Device driver for Atmel SSC peripheral"

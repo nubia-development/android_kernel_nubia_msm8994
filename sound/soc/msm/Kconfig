@@ -3,6 +3,9 @@ menu "MSM SoC Audio support"
 config SND_MSM_SOC_MSM7K
 	 tristate
 
+config HEADPHONE_SWITCH
+	tristate "Support headphone switch"
+
 config SND_MSM_SOC
 	tristate "SoC Audio for the MSM series chips"
 	depends on ARCH_MSM7X27
@@ -316,11 +319,12 @@ config SND_SOC_MSM8994
 	select SND_DYNAMIC_MINORS
 	select MSM_QDSP6_APRV2
 	select MSM_QDSP6V2_CODECS
-	select SND_SOC_WCD9330
+	select SND_SOC_AK4961  if AK4961_CODEC
+	select SND_SOC_WCD9330 if WCD9330_CODEC
 	select SND_SOC_MSM_HDMI_CODEC_RX
 	select QTI_PP
 	select DTS_SRS_TM
-	select SND_SOC_CPE
+	select SND_SOC_CPE if WCD9330_CODEC
 	select MSM_ULTRASOUND
 	select DOLBY_DS2
 	select SND_HWDEP

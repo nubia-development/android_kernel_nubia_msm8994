@@ -12,6 +12,26 @@ config FB_MSM_MDSS_HDMI_PANEL
 	The MDSS HDMI Panel provides support for transmitting TMDS signals of
 	MDSS frame buffer data to connected hdmi compliant TVs, monitors etc.
 
+config ZTEMT_MIPI_1080P_R63417_SHARP_IPS_5P5
+	bool "ZTEMT MIPI 1080P 5P5 PANEL"
+	---help---
+    This option enables support 5.5 inch LCD.
+	
+config ZTEMT_LCD_DISP_ENHANCE
+	bool "ZTEMT LCD disp enhance"
+	---help---
+	  ztemt lcd clor enhance.
+
+config ZTEMT_LCD_1080P_R63315_SHARP_IPS_5P0
+	bool "ZTEMT MIPI 1080P 5P0 PANEL"
+	---help---
+    This option enables support 5.0 inch LCD.	
+    
+config ZTEMT_LCD_BRIGHTNESS_COMMON
+	bool "ZTEMT BRIGHTNESS COMMON"
+	---help---
+    This option enables support for ztemt LCD brightness.    
+    
 config FB_MSM_MDSS_HDMI_MHL_SII8334
 	depends on FB_MSM_MDSS_HDMI_PANEL
 	bool 'MHL SII8334 support '
@@ -53,6 +73,15 @@ config FB_MSM_MDSS_MDP3
 	---help---
 	The MDP3 provides support for an older version display controller
 	included in latest display sub-system, known as MDSS.
+
+config ZTEMT_MHL_POWER
+    depends on FB_MSM_MDSS
+    bool "ztemt power control"
+    ---help---
+    mhl power control!
+	
+#source "drivers/video/msm/mdss/Sii8620/Kconfig"
+source "drivers/video/msm/mdss/Sii8620_103/Kconfig"
 
 config FB_MSM_MDSS_XLOG_DEBUG
 	depends on FB_MSM_MDSS

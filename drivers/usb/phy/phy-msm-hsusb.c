@@ -321,7 +321,13 @@ static int msm_hsphy_reset(struct usb_phy *uphy)
 
 	return 0;
 }
-
+#ifdef CONFIG_USB_UDISK_DETECT_FIX
+void override_phy_setting(int phy_reg)
+{
+     override_phy_init= phy_reg;
+     printk(KERN_ERR"ztemt: override_phy_init is %d",override_phy_init);
+}
+#endif
 static int msm_hsphy_init(struct usb_phy *uphy)
 {
 	struct msm_hsphy *phy = container_of(uphy, struct msm_hsphy, phy);

@@ -25,6 +25,7 @@
 
 #include "mdss_dsi.h"
 
+#include "zte_disp_enhance.h"
 #define DT_CMD_HDR 6
 #define MIN_REFRESH_RATE 30
 #define DEFAULT_MDP_TRANSFER_TIME 14000
@@ -176,10 +177,46 @@ static struct dsi_cmd_desc backlight_cmd = {
 	led_pwm1
 };
 
+static char dimming[2] = {0x53, 0x0};	/* DTYPE_DCS_WRITE1 */
+static struct dsi_cmd_desc dimming_cmd = {
+	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(dimming)},
+	dimming
+};
+
+static void mdss_dsi_panel_dimming_enable(struct mdss_dsi_ctrl_pdata *ctrl, bool enable)
+{
+	struct dcs_cmd_req cmdreq;
+	struct mdss_panel_info *pinfo;
+	pinfo = &(ctrl->panel_data.panel_info);
+	if (pinfo->dcs_cmd_by_left) {
+		if (ctrl->ndx != DSI_CTRL_LEFT) {
+			pr_err("[lcd]%s: %d: ctrl->ndx error \n", __func__, __LINE__);
+			return;
+		}
+	}
+
+	if (enable) {
+		dimming[1] = 0x2C;
+	} else {
+		dimming[1] = 0x24;
+	}
+
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	cmdreq.cmds = &dimming_cmd;
+	cmdreq.cmds_cnt = 1;
+	cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL |CMD_REQ_HS_MODE;
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+
+	pr_debug("[lcd]%s: %d: %s dimming \n", __func__, __LINE__, enable ? "enable" : "disable");
+}
+
 static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 {
 	struct dcs_cmd_req cmdreq;
 	struct mdss_panel_info *pinfo;
+	static int last_level = -1;
 
 	pinfo = &(ctrl->panel_data.panel_info);
 	if (pinfo->dcs_cmd_by_left) {
@@ -187,18 +224,37 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 			return;
 	}
 
-	pr_debug("%s: level=%d\n", __func__, level);
+	if (pinfo->disable_dimming_when_suspend) {
+		if (level == 0)
+			mdss_dsi_panel_dimming_enable(ctrl, false);
+	}
+	if (pinfo->disable_dimming_when_resume) {
+		if (last_level == 0 && level < 30) {
+			msleep(20);
+			mdss_dsi_panel_dimming_enable(ctrl, false);
+		}
+	}
+
+	pr_err("%s: level=%d\n", __func__, level);
 
 	led_pwm1[1] = (unsigned char)level;
 
 	memset(&cmdreq, 0, sizeof(cmdreq));
 	cmdreq.cmds = &backlight_cmd;
 	cmdreq.cmds_cnt = 1;
-	cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
+	cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL |CMD_REQ_HS_MODE;
 	cmdreq.rlen = 0;
 	cmdreq.cb = NULL;
 
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+
+	if (pinfo->disable_dimming_when_resume) {
+		if (last_level == 0 && level < 30) {
+			msleep(20);
+			mdss_dsi_panel_dimming_enable(ctrl, true);
+		}
+	}
+	last_level = level;
 }
 
 static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
@@ -690,6 +746,10 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 
 	if (ctrl->off_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);
+
+#ifdef CONFIG_ZTEMT_LCD_DISP_ENHANCE
+	zte_set_ctrl_point(NULL);
+#endif
 
 end:
 	pinfo->blank_state = MDSS_PANEL_BLANK_BLANK;
@@ -1356,6 +1416,14 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 			pr_err("%s:%d, Disp_en gpio not specified\n",
 					__func__, __LINE__);
 	}
+
+	pinfo->disable_dimming_when_suspend = of_property_read_bool(np, "qcom,disable-dimming-when-suspend");
+	printk(KERN_INFO "[lcd] %s: %d: disable_dimming_when_suspend is %d\n",
+		__func__, __LINE__, pinfo->disable_dimming_when_suspend);
+
+	pinfo->disable_dimming_when_resume = of_property_read_bool(np, "qcom,disable-dimming-when-resume");
+	printk(KERN_INFO "[lcd] %s: %d: disable_dimming_when_resume is %d\n",
+		__func__, __LINE__, pinfo->disable_dimming_when_resume);
 
 	return 0;
 }

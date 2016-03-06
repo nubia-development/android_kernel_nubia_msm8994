@@ -466,22 +466,35 @@ static struct attribute_group hdmi_edid_fs_attrs_group = {
 	.attrs = hdmi_edid_fs_attrs,
 };
 
+#ifdef CONFIG_SII8620_MHL_TX
+#define EDID_BLOCK_SIZE						128
+extern uint8_t EDID_block_data_t [4*EDID_BLOCK_SIZE];
+#endif
 static int hdmi_edid_read_block(struct hdmi_edid_ctrl *edid_ctrl, int block,
 	u8 *edid_buf)
 {
 	const u8 *b = NULL;
 	u32 ndx, check_sum, print_len;
+#ifdef CONFIG_SII8620_MHL_TX
+	//int block_size;
+	//int i, status;
+	//int retry_cnt = 0;
+	//struct hdmi_tx_ddc_data ddc_data;
+#else
 	int block_size;
 	int i, status;
 	int retry_cnt = 0, checksum_retry = 0;
 	struct hdmi_tx_ddc_data ddc_data;
+#endif
 	b = edid_buf;
 
 	if (!edid_ctrl) {
 		DEV_ERR("%s: invalid input\n", __func__);
 		return -EINVAL;
 	}
-
+#ifdef CONFIG_SII8620_MHL_TX
+	memcpy(edid_buf, &EDID_block_data_t,2*EDID_BLOCK_SIZE);
+#else 
 read_retry:
 	block_size = 0x80;
 	status = 0;
@@ -517,7 +530,7 @@ read_retry:
 
 	if (status)
 		goto error;
-
+#endif
 	/* Calculate checksum */
 	check_sum = 0;
 	for (ndx = 0; ndx < 0x80; ++ndx)
@@ -530,6 +543,15 @@ read_retry:
 			DEV_DBG("EDID[%02x-%02x] %02x %02x %02x %02x\n",
 				ndx, ndx+3,
 				b[ndx+0], b[ndx+1], b[ndx+2], b[ndx+3]);
+#ifdef CONFIG_SII8620_MHL_TX
+		//status = -EPROTO;
+		//if (retry_cnt++ < 3) {
+			//DEV_ERR("Retrying reading EDID %d time\n", retry_cnt);
+			//goto read_retry;
+		//}
+		//goto error;
+		//return 0;
+#else
 		status = -EPROTO;
 		if (checksum_retry++ < 3) {
 			DEV_DBG("Retrying reading EDID %d time\n",
@@ -537,6 +559,7 @@ read_retry:
 			goto read_retry;
 		}
 		goto error;
+#endif
 	}
 
 	print_len = 0x80;
@@ -544,9 +567,14 @@ read_retry:
 		DEV_DBG("EDID[%02x-%02x] %02x %02x %02x %02x\n",
 			ndx, ndx+3,
 			b[ndx+0], b[ndx+1], b[ndx+2], b[ndx+3]);
-
+	return 0;
+#ifdef CONFIG_SII8620_MHL_TX	
+	//error:
+	//	return status;
+#else
 error:
 	return status;
+#endif
 } /* hdmi_edid_read_block */
 
 #define EDID_BLK_LEN 128
@@ -1090,12 +1118,24 @@ static void hdmi_edid_add_sink_video_format(struct hdmi_edid_ctrl *edid_ctrl,
 				video_format);
 	u32 supported = timing.supported;
 	struct hdmi_edid_sink_data *sink_data = &edid_ctrl->sink_data;
+	#ifdef CONFIG_SII8620_MHL_TX
+	extern bool MHL3_mode;
+	#endif
 
 	if (video_format >= HDMI_VFRMT_MAX) {
 		DEV_ERR("%s: video format: %s is not supported\n", __func__,
 			msm_hdmi_mode_2string(video_format));
 		return;
 	}
+
+#ifdef CONFIG_SII8620_MHL_TX
+	if((!MHL3_mode)&&(video_format >= HDMI_VFRMT_END)){
+	//if(video_format >= HDMI_VFRMT_END){
+		DEV_DBG("%s: video format: %d,%s is not supported cause MHL worked in MHL1 or 2 mode\n", __func__,video_format,
+			msm_hdmi_mode_2string(video_format));
+		return;
+ 	}
+#endif
 
 	DEV_DBG("%s: EDID: format: %d [%s], %s\n", __func__,
 		video_format, msm_hdmi_mode_2string(video_format),
@@ -1720,12 +1760,12 @@ int hdmi_edid_read(void *input)
 			edid_ctrl->sink_mode ? "no" : "yes");
 		break;
 	case 1: /* Read block 1 */
-		status = hdmi_edid_read_block(edid_ctrl, 1, &edid_buf[0x80]);
-		if (status) {
+		//status = hdmi_edid_read_block(edid_ctrl, 1, &edid_buf[0x80]);
+		/*if (status) {
 			DEV_ERR("%s: ddc read block(1) failed: %d\n", __func__,
 				status);
 			goto error;
-		}
+		}*/
 		if (edid_buf[0x80] != 2)
 			num_of_cea_blocks = 0;
 		if (num_of_cea_blocks) {
@@ -1753,13 +1793,13 @@ int hdmi_edid_read(void *input)
 	case 3:
 	case 4:
 		for (i = 1; i <= num_of_cea_blocks; i++) {
-			status = hdmi_edid_read_block(
+			/*status = hdmi_edid_read_block(
 				edid_ctrl, i, edid_buf + (0x80 * i));
 			if (status) {
 				DEV_ERR("%s: read blk(%d) failed:%d\n",
 					__func__, i, status);
 				goto error;
-			}
+			}*/
 		}
 		break;
 	default:

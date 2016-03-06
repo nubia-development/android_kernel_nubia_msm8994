@@ -19,11 +19,17 @@
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 
+#include <linux/of_gpio.h>
+
 #include "core.h"
 #include "dwc3_otg.h"
 #include "io.h"
 #include "debug.h"
 #include "xhci.h"
+
+/*
+CONFIG_ZTEMT_MSM8994_CHARGER
+*/
 
 #define VBUS_REG_CHECK_DELAY	(msecs_to_jiffies(1000))
 #define MAX_INVALID_CHRGR_RETRY 3
@@ -32,6 +38,70 @@ module_param(max_chgr_retry_count, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(max_chgr_retry_count, "Max invalid charger retry count");
 
 static void dwc3_otg_notify_host_mode(struct usb_otg *otg, int host_mode);
+#ifdef CONFIG_USB_UDISK_DETECT_FIX
+extern void override_phy_setting(int phy_reg);
+#endif
+#ifdef CONFIG_SII8620_MHL_TX
+//static struct dwc3_otg *dotg_MHL;
+ /*static int reg_set_optimum_mode_check(struct regulator *reg, int load_uA)
+ {
+     return (regulator_count_voltages(reg) > 0) ?
+         regulator_set_optimum_mode(reg, load_uA) : 0;
+}*/
+extern struct platform_device *dwc3_mhl_t;
+extern struct dwc3_mhl *dwc3_mhl_n;
+void dwc3_otg_set_MHL_power(bool enable)
+{
+    int ret;
+	//dwc3_mhl_n ->vbus_mhl = devm_regulator_get(&dwc3_mhl_t->dev, "vbus_dwc3");
+	if (IS_ERR(dwc3_mhl_n ->vbus_mhl )){
+		printk(KERN_ERR "Failed to get dwc3_mhl_t vbus regulator");
+		return;
+	}
+	if(dwc3_mhl_n ->vbus_mhl==NULL){
+		printk(KERN_ERR "%s: returned ;;;;;enable:%d\n", __func__, enable);
+		return;
+	}
+	printk(KERN_ERR "%s: enable:%d\n", __func__, enable);
+	
+	if(enable)
+		ret = regulator_enable(dwc3_mhl_n ->vbus_mhl);
+	else
+		ret = regulator_disable(dwc3_mhl_n ->vbus_mhl);
+}
+
+void dwc3_otg_start_MHL_power(void)
+{
+	printk(KERN_ERR "%s: get dwc3_MHL vbus device......\n", __func__);
+
+	dwc3_mhl_n ->vbus_mhl = devm_regulator_get(&dwc3_mhl_t->dev, "vbus_dwc3");
+	if (IS_ERR(dwc3_mhl_n ->vbus_mhl )){
+		printk(KERN_ERR "Failed to get dwc3_mhl_t vbus regulator");
+		return;
+	}
+	if(dwc3_mhl_n ->vbus_mhl==NULL){
+		printk(KERN_ERR "%s: returned ;;;;;\n", __func__);
+		return;
+	}
+	/*if(!dotg_MHL->otg.phy->dev){
+		printk(KERN_ERR "%s: dotg_MHL->otg.phy->dev don't exit\n", __FILE__);
+		return;
+		}
+	dev_err(dotg_MHL->otg.phy->dev, "dwc3_otg_start_MHL_power@@@@@@@@@@@\n");
+			
+		if (!dotg_MHL->vbus_otg) {
+			dev_err(dotg_MHL->otg.phy->dev, "!dotg_MHL->vbus_otg@@@@@@@@@@@\n");
+			dotg_MHL->vbus_otg = devm_regulator_get(dotg_MHL->otg.phy->dev->parent,
+								"vbus_dwc3");
+			if (IS_ERR(dotg_MHL->vbus_otg)) {
+				dev_err(dotg_MHL->otg.phy->dev, "Failed to get MHL vbus regulator@!@@@@@\n");
+				//PTR_ERR(dotg_MHL->vbus_otg);
+				dotg_MHL->vbus_otg = 0;
+				return;
+			}
+		}*/
+}
+#endif
 
 /**
  * dwc3_otg_start_host -  helper function for starting/stoping the host controller driver.
@@ -65,7 +135,21 @@ static int dwc3_otg_start_host(struct usb_otg *otg, int on)
 
 	if (on) {
 		dev_dbg(otg->phy->dev, "%s: turn on host\n", __func__);
-
+#ifdef CONFIG_USB_UDISK_DETECT_FIX
+        override_phy_setting(0x00D1c4E7);
+	    ret=usb_phy_init(dwc->usb2_phy);
+		
+        if(ret){
+			pr_err("%s:usb_phy_init(dwc->usb2_phy)return %d",__func__,ret);
+            return ret;
+		}
+		
+		ret=usb_phy_init(dwc->usb3_phy);
+        if(ret){
+			pr_err("%s:usb_phy_init(dwc->usb3_phy)return %d",__func__,ret);
+            return ret;
+		}
+#endif		
 		dwc3_otg_notify_host_mode(otg, on);
 		usb_phy_notify_connect(dotg->dwc->usb2_phy, USB_SPEED_HIGH);
 		ret = regulator_enable(dotg->vbus_otg);
@@ -131,7 +215,9 @@ static int dwc3_otg_start_host(struct usb_otg *otg, int on)
 
 		dwc3_gadget_usb3_phy_suspend(dwc, false);
 		dwc3_set_mode(dwc, DWC3_GCTL_PRTCAP_DEVICE);
-
+#ifdef CONFIG_USB_UDISK_DETECT_FIX
+        override_phy_setting(0x00D1D1E7);
+#endif
 		/* re-init core and OTG registers as block reset clears these */
 		dwc3_post_host_reset_core_init(dwc);
 		dbg_event(0xFF, "StHost put", 0);
@@ -393,6 +479,22 @@ static void dwc3_otg_notify_host_mode(struct usb_otg *otg, int host_mode)
 		power_supply_set_scope(dotg->psy, POWER_SUPPLY_SCOPE_DEVICE);
 }
 
+#ifdef CONFIG_SII8620_MHL_TX
+static bool SinkSupplyPwr = false;
+#define GPIO_BB_ID_SEL                        894
+
+void MHLSinkProvidePower(bool on)
+{
+	SinkSupplyPwr = on;
+}
+EXPORT_SYMBOL(MHLSinkProvidePower);
+
+static bool IsMHLSinkProvidePower(void)
+{
+      return SinkSupplyPwr;
+}
+#endif
+
 static int dwc3_otg_set_power(struct usb_phy *phy, unsigned mA)
 {
 	enum power_supply_property power_supply_type;
@@ -407,26 +509,41 @@ static int dwc3_otg_set_power(struct usb_phy *phy, unsigned mA)
 	if (dotg->charger->charging_disabled)
 		return 0;
 
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+#else
 	if (dotg->charger->chg_type != DWC3_INVALID_CHARGER) {
 		dev_dbg(phy->dev,
 			"SKIP setting power supply type again,chg_type = %d\n",
 			dotg->charger->chg_type);
 		goto skip_psy_type;
 	}
+#endif
 
 	if (dotg->charger->chg_type == DWC3_SDP_CHARGER)
 		power_supply_type = POWER_SUPPLY_TYPE_USB;
 	else if (dotg->charger->chg_type == DWC3_CDP_CHARGER)
 		power_supply_type = POWER_SUPPLY_TYPE_USB_CDP;
 	else if (dotg->charger->chg_type == DWC3_DCP_CHARGER ||
+			#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+			dotg->charger->chg_type == DWC3_FLOATED_CHARGER ||
+			#endif
 			dotg->charger->chg_type == DWC3_PROPRIETARY_CHARGER)
 		power_supply_type = POWER_SUPPLY_TYPE_USB_DCP;
+	#ifdef CONFIG_SII8620_MHL_TX
+	else if(gpio_get_value(GPIO_BB_ID_SEL)&&IsMHLSinkProvidePower())
+	{
+		power_supply_type = POWER_SUPPLY_TYPE_USB_DCP;
+	}
+	#endif
 	else
 		power_supply_type = POWER_SUPPLY_TYPE_UNKNOWN;
 
 	power_supply_set_supply_type(dotg->psy, power_supply_type);
 
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+#else
 skip_psy_type:
+#endif
 
 	if (dotg->charger->chg_type == DWC3_CDP_CHARGER)
 		mA = DWC3_IDEV_CHG_MAX;
@@ -581,6 +698,12 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 					work = 1;
 					break;
 				case DWC3_FLOATED_CHARGER:
+				#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+					dev_dbg(phy->dev, "lpm, FLOATED charger\n");
+					dwc3_otg_set_power(phy,
+							DWC3_IDEV_CHG_FLOATING_MAX);
+					pm_runtime_put_sync(phy->dev);		
+				#else
 					if (dotg->charger_retry_count <
 							max_chgr_retry_count)
 						dotg->charger_retry_count++;
@@ -602,12 +725,15 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 					}
 					charger->start_detection(dotg->charger,
 									false);
-
+      #endif
 				default:
 					dev_dbg(phy->dev, "chg_det started\n");
 					charger->start_detection(charger, true);
 					break;
 				}
+				#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+			  pr_err(">>ZTEMT_CHARGE>>  chg_type:%d \n", charger->chg_type);
+				#endif
 			} else {
 				/*
 				 * no charger registered, assuming SDP

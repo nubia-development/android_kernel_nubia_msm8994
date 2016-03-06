@@ -282,6 +282,18 @@ static int read_eeprom_memory(struct msm_eeprom_ctrl_t *e_ctrl,
 
 	eb_info = e_ctrl->eboard_info;
 
+	#ifdef CONFIG_IMX179
+	for (j = 0; j < block->num_custom; j++) {
+		if (block->zte_custom_map[j].valid_size) {
+			e_ctrl->i2c_client.addr_type = block->zte_custom_map[j].addr_t;
+			rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+				&(e_ctrl->i2c_client), block->zte_custom_map[j].addr,
+				block->zte_custom_map[j].data, block->zte_custom_map[j].data_t);
+				msleep(block->zte_custom_map[j].delay);
+		}
+	}
+	#endif
+
 	for (j = 0; j < block->num_map; j++) {
 		if (emap[j].saddr.addr) {
 			eb_info->i2c_slaveaddr = emap[j].saddr.addr;
@@ -365,6 +377,31 @@ static int msm_eeprom_parse_memory_map(struct device_node *of,
 	char property[PROPERTY_MAXSIZE];
 	uint32_t count = 6;
 	struct msm_eeprom_memory_map_t *map;
+	#ifdef CONFIG_IMX179
+	struct eeprom_map_t *zte_custom_map;
+	snprintf(property, PROPERTY_MAXSIZE, "zte,num-custom");
+	rc = of_property_read_u32(of, property, &data->num_custom);
+	pr_err("%s: %s %d\n", __func__, property, data->num_custom);
+	if (rc < 0) {
+		pr_err("%s failed rc %d\n", __func__, rc);
+	}
+	if (data->num_custom){
+		zte_custom_map = kzalloc((sizeof(*zte_custom_map) * data->num_custom), GFP_KERNEL);
+		if (!zte_custom_map) {
+			pr_err("%s failed line %d\n", __func__, __LINE__);
+		}
+
+		data->zte_custom_map = zte_custom_map;
+		for (i = 0; i < data->num_custom; i++) {
+			snprintf(property, PROPERTY_MAXSIZE, "zte,custom%d", i);
+			rc = of_property_read_u32_array(of, property,
+					(uint32_t *)&zte_custom_map[i], count);
+			if (rc < 0) {
+				pr_err("%s: failed %d\n", __func__, __LINE__);
+			}
+		}
+	}
+	#endif
 
 	snprintf(property, PROPERTY_MAXSIZE, "qcom,num-blocks");
 	rc = of_property_read_u32(of, property, &data->num_map);
@@ -432,6 +469,10 @@ static int msm_eeprom_parse_memory_map(struct device_node *of,
 	return rc;
 
 ERROR:
+	#ifdef CONFIG_IMX179
+	if (data->num_custom)
+		kfree(data->zte_custom_map);
+	#endif
 	kfree(data->map);
 	memset(data, 0, sizeof(*data));
 	return rc;

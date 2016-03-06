@@ -38,6 +38,29 @@
 #include <linux/msm_bcl.h>
 #include <linux/ktime.h>
 
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+#include <linux/qpnp/qpnp-adc.h>
+#include <linux/wakelock.h>
+#define ZTE_EOC_PERIOD_FAST_MS	5000
+#define ZTE_EOC_PERIOD_LOW_MS	 10000
+#endif
+
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+static int debug_mask_smbchg = 1;
+module_param_named(
+	debug_mask_smbchg, debug_mask_smbchg, int, S_IRUSR | S_IWUSR
+);
+#define DBG_CHARGE(x...) do {if (debug_mask_smbchg) pr_info(">>ZTEMT_CHARGE>>  " x); } while (0)
+#endif
+
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+//´ò¿ªµ÷ÊÔ½Ó¿Ú
+//#undef pr_debug
+//#define pr_debug   pr_info
+#undef KERN_INFO
+#define KERN_INFO KERN_ERR
+#endif
+
 /* Mask/Bit helpers */
 #define _SMB_MASK(BITS, POS) \
 	((unsigned char)(((1 << (BITS)) - 1) << (POS)))
@@ -233,6 +256,17 @@ struct smbchg_chip {
 	unsigned long			first_aicl_seconds;
 	int				aicl_irq_count;
 	struct mutex			usb_status_lock;
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	struct delayed_work zte_eoc_work;
+	struct wake_lock		eoc_wake_lock;
+ 	 bool				chg_done_batt_full;
+ 	 bool       bad_charger;
+        int         insert_charger_type;
+#endif 
+ #ifdef CONFIG_ZTEMT_CHARGE_PLUS_X_MODE
+  int        post_batt_ntc_temp;
+  bool    	first_time_calc_lvl ;
+ #endif
 };
 
 enum qpnp_schg {
@@ -272,6 +306,15 @@ enum wake_reason {
 	PM_PARALLEL_TAPER = BIT(3),
 };
 
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	static int get_prop_charger_voltage_now(struct smbchg_chip *chip);
+	static int get_prop_pmic_temp(struct smbchg_chip *chip);
+#endif
+
+#ifdef CONFIG_ZTEMT_CHARGE_PLUS_X_MODE
+void smbchg_xcharge_mode_en(struct smbchg_chip *chip ,bool xcharge_mode_en);
+#endif
+
 static int smbchg_debug_mask;
 module_param_named(
 	debug_mask, smbchg_debug_mask, int, S_IRUSR | S_IWUSR
@@ -300,6 +343,17 @@ module_param_named(
 	wipower_dcin_hyst_uv, wipower_dcin_hyst_uv,
 	int, S_IRUSR | S_IWUSR
 );
+
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	#define FULL_FCC_MAH   3000
+#endif
+
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+    static int get_prop_batt_capacity(struct smbchg_chip *chip);
+    static int get_prop_batt_health(struct smbchg_chip *chip);
+    static void  
+    start_eoc_work(struct smbchg_chip *chip);
+#endif
 
 #define pr_smb(reason, fmt, ...)				\
 	do {							\
@@ -769,7 +823,27 @@ static int get_prop_batt_status(struct smbchg_chip *chip)
 		status = POWER_SUPPLY_STATUS_DISCHARGING;
 	else
 		status = POWER_SUPPLY_STATUS_CHARGING;
+
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	if((status == POWER_SUPPLY_STATUS_CHARGING )&&
+		   (chip->chg_done_batt_full == true))
+		status = POWER_SUPPLY_STATUS_FULL;
+#endif
 out:
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+         {
+                int battery_health = get_prop_batt_health(chip);
+                int current_soc = get_prop_batt_capacity(chip);
+                if((chip->chg_done_batt_full == true)&&
+                    (battery_health!=POWER_SUPPLY_HEALTH_OVERHEAT)&&
+                    (battery_health!=POWER_SUPPLY_HEALTH_COLD)&&
+                    (current_soc > 98)){
+                        if(status != POWER_SUPPLY_STATUS_FULL){
+                            status  = POWER_SUPPLY_STATUS_FULL;
+                        }
+                } 
+         }
+#endif
 	pr_smb_rt(PR_MISC, "CHGR_STS = 0x%02x\n", reg);
 	return status;
 }
@@ -1045,6 +1119,13 @@ static int calc_thermal_limited_current(struct smbchg_chip *chip,
 #define EN_BAT_CHG_BIT		BIT(1)
 static int smbchg_charging_en(struct smbchg_chip *chip, bool en)
 {
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+    DBG_CHARGE("Charger Contro:enable=%d \n",en );
+    if(en &&(get_prop_batt_status(chip) != POWER_SUPPLY_STATUS_CHARGING)){
+        smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
+            EN_BAT_CHG_BIT, EN_BAT_CHG_BIT);
+    }
+#endif
 	/* The en bit is configured active low */
 	return smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
 			EN_BAT_CHG_BIT, en ? 0 : EN_BAT_CHG_BIT);
@@ -1371,6 +1452,9 @@ static int smbchg_set_high_usb_chg_current(struct smbchg_chip *chip,
 	if (rc < 0)
 		dev_err(chip->dev, "Couldn't write cfg 5 rc = %d\n", rc);
 	chip->usb_max_current_ma = usb_current_table[i];
+	#ifdef CONFIG_ZTEMT_CHARGE_PLUS_X_MODE
+	chip->first_time_calc_lvl = 0;
+	#endif
 	return rc;
 }
 
@@ -1867,7 +1951,11 @@ static int smbchg_get_aicl_level_ma(struct smbchg_chip *chip)
 	return usb_current_table[reg];
 }
 
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+#define PARALLEL_CHG_THRESHOLD_CURRENT	1200
+#else
 #define PARALLEL_CHG_THRESHOLD_CURRENT	1800
+#endif
 static void smbchg_parallel_usb_enable(struct smbchg_chip *chip)
 {
 	struct power_supply *parallel_psy = get_parallel_psy(chip);
@@ -2883,7 +2971,12 @@ static void smbchg_aicl_deglitch_wa_en(struct smbchg_chip *chip, bool en)
 
 	if (chip->force_aicl_rerun)
 		return;
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	if (en && !chip->aicl_deglitch_short &&
+		   !chip->bad_charger) {
+#else
 	if (en && !chip->aicl_deglitch_short) {
+#endif
 		rc = smbchg_sec_masked_write(chip,
 			chip->usb_chgpth_base + USB_AICL_CFG,
 			USB_AICL_DEGLITCH_MASK, USB_AICL_DEGLITCH_SHORT);
@@ -2929,6 +3022,12 @@ static void smbchg_aicl_deglitch_wa_en(struct smbchg_chip *chip, bool en)
 		}
 		pr_smb(PR_STATUS, "AICL deglitch set to normal\n");
 	}
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	if (en && !chip->aicl_deglitch_short &&
+		   chip->bad_charger) {
+		    return ;
+	}
+#endif
 	chip->aicl_deglitch_short = en;
 }
 
@@ -2995,6 +3094,9 @@ static void smbchg_aicl_deglitch_wa_check(struct smbchg_chip *chip)
 
 #define UNKNOWN_BATT_TYPE	"Unknown Battery"
 #define LOADING_BATT_TYPE	"Loading Battery Data"
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+#define SMGCHARGE_IDEV_CHG_MAX 1000
+#endif
 static int smbchg_config_chg_battery_type(struct smbchg_chip *chip)
 {
 	int rc = 0, max_voltage_uv = 0, fastchg_ma = 0, ret = 0;
@@ -3147,6 +3249,19 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 	else
 		current_limit = prop.intval / 1000;
 
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+        if(chip->bad_charger){
+			rc = chip->usb_psy->get_property(chip->usb_psy,
+							POWER_SUPPLY_PROP_TYPE, &prop);
+				if (rc < 0)
+					dev_err(chip->dev,
+						"could not read USB charger type property, rc=%d\n", rc);
+				else if(prop.intval == POWER_SUPPLY_TYPE_USB_DCP) {
+					 	current_limit = min(current_limit, SMGCHARGE_IDEV_CHG_MAX);;
+			  }
+  	}
+#endif
+
 	read_usb_type(chip, &usb_type_name, &usb_supply_type);
 	if (usb_supply_type != POWER_SUPPLY_TYPE_USB)
 		goto  skip_current_for_non_sdp;
@@ -3163,6 +3278,10 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 		if (rc < 0)
 			dev_err(chip->dev,
 				"Couldn't set usb current rc = %d\n", rc);
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+            /* Add For USB Insert IRQ Lost */
+            start_eoc_work(chip);
+#endif
 	}
 	mutex_unlock(&chip->current_change_lock);
 
@@ -3229,7 +3348,11 @@ struct regulator_ops smbchg_otg_reg_ops = {
 
 #define USBIN_CHGR_CFG			0xF1
 #define ADAPTER_ALLOWANCE_MASK		0x7
+#ifdef CONFIG_ZTEMT_SUPPORT_CHARGER_5V
+#define USBIN_ADAPTER_5V		0x0
+#else
 #define USBIN_ADAPTER_9V		0x3
+#endif
 #define USBIN_ADAPTER_5V_9V_UNREG	0x5
 #define HVDCP_EN_BIT			BIT(3)
 static int smbchg_external_otg_regulator_enable(struct regulator_dev *rdev)
@@ -3266,7 +3389,11 @@ static int smbchg_external_otg_regulator_enable(struct regulator_dev *rdev)
 
 	rc = smbchg_sec_masked_write(chip,
 				chip->usb_chgpth_base + USBIN_CHGR_CFG,
+#ifdef CONFIG_ZTEMT_SUPPORT_CHARGER_5V
+				0xFF, USBIN_ADAPTER_5V);
+#else
 				0xFF, USBIN_ADAPTER_9V);
+#endif
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't write usb allowance rc=%d\n", rc);
 		return rc;
@@ -3295,7 +3422,11 @@ static int smbchg_external_otg_regulator_disable(struct regulator_dev *rdev)
 	 */
 	rc = smbchg_sec_masked_write(chip,
 				chip->usb_chgpth_base + CHGPTH_CFG,
+#ifdef CONFIG_ZTEMT_SUPPORT_CHARGER_5V
+				HVDCP_EN_BIT, 0);
+#else
 				HVDCP_EN_BIT, HVDCP_EN_BIT);
+#endif
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't enable HVDCP rc=%d\n", rc);
 		return rc;
@@ -3709,6 +3840,9 @@ static void handle_usb_removal(struct smbchg_chip *chip)
 	int rc;
 
 	pr_smb(PR_STATUS, "triggered\n");
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+        chip->bad_charger =  false;
+#endif
 	smbchg_aicl_deglitch_wa_check(chip);
 	if (chip->force_aicl_rerun && !chip->very_weak_charger) {
 		rc = smbchg_hw_aicl_rerun_en(chip, true);
@@ -3746,6 +3880,12 @@ static void handle_usb_removal(struct smbchg_chip *chip)
 	}
 	chip->parallel.enabled_once = false;
 	chip->vbat_above_headroom = false;
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+       chip->chg_done_batt_full = false;
+#ifdef CONFIG_ZTEMT_CHARGE_PLUS_X_MODE
+	smbchg_xcharge_mode_en(chip,false);
+#endif
+#endif
 	rc = smbchg_masked_write(chip, chip->usb_chgpth_base + CMD_IL,
 			ICL_OVERRIDE_BIT, 0);
 	if (rc < 0)
@@ -3782,11 +3922,25 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 	pr_smb(PR_STATUS,
 		"inserted type = %d (%s)", usb_supply_type, usb_type_name);
 
+#ifdef CONFIG_ZTEMT_CHARGE_PLUS_X_MODE
+	   chip->post_batt_ntc_temp = DEFAULT_BATT_TEMP;
+	   chip->first_time_calc_lvl = 1;
+#endif
+
 	smbchg_aicl_deglitch_wa_check(chip);
 	if (chip->usb_psy) {
 		pr_smb(PR_MISC, "setting usb psy type = %d\n",
 				usb_supply_type);
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	       if(usb_supply_type == POWER_SUPPLY_TYPE_USB_DCP){
+	  	    power_supply_set_supply_type(chip->usb_psy, usb_supply_type);
+	       }
+	 	DBG_CHARGE("inserted %s, usb psy type = %d \n",
+			usb_type_name, usb_supply_type); 
+              chip->insert_charger_type = usb_supply_type;
+#else
 		power_supply_set_supply_type(chip->usb_psy, usb_supply_type);
+#endif
 		pr_smb(PR_MISC, "setting usb psy present = %d\n",
 				chip->usb_present);
 		power_supply_set_present(chip->usb_psy, chip->usb_present);
@@ -3839,6 +3993,9 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 		rc = enable_irq_wake(chip->aicl_done_irq);
 		chip->enable_aicl_wake = true;
 	}
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+        start_eoc_work(chip);
+#endif
 }
 
 void update_usb_status(struct smbchg_chip *chip, bool usb_present, bool force)
@@ -3938,6 +4095,9 @@ static void increment_aicl_count(struct smbchg_chip *chip)
 	u8 reg;
 	long elapsed_seconds;
 	unsigned long now_seconds;
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	bool usb_present = is_usb_present(chip);
+#endif
 
 	pr_smb(PR_INTERRUPT, "aicl count c:%d dgltch:%d first:%ld\n",
 			chip->aicl_irq_count, chip->aicl_deglitch_short,
@@ -4003,6 +4163,20 @@ static void increment_aicl_count(struct smbchg_chip *chip)
 					rc);
 			schedule_work(&chip->usb_set_online_work);
 		}
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+        	if(usb_present && bad_charger && !chip->bad_charger){
+                    chip->bad_charger =  bad_charger;
+                    rc = smbchg_sec_masked_write(chip,
+                        	chip->misc_base + MISC_TRIM_OPT_15_8,
+                        	AICL_RERUN_MASK, AICL_RERUN_OFF);
+                    if (rc){
+                        pr_err("Couldn't turn off AICL rerun rc:%d\n",rc);
+                    }
+
+                    chip->usb_target_current_ma = min(chip->usb_target_current_ma,SMGCHARGE_IDEV_CHG_MAX);
+                    DBG_CHARGE("@@@@@@@ Adjust IUSB Current %d \n", chip->usb_target_current_ma);	
+            }
+ #endif
 	}
 }
 
@@ -4027,6 +4201,10 @@ static enum power_supply_property smbchg_battery_properties[] = {
 	POWER_SUPPLY_PROP_INPUT_CURRENT_MAX,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,
 	POWER_SUPPLY_PROP_FLASH_ACTIVE,
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	POWER_SUPPLY_PROP_USB_PRESENT,
+ 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+#endif
 };
 
 static int smbchg_battery_set_property(struct power_supply *psy,
@@ -4170,6 +4348,14 @@ static int smbchg_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_FLASH_ACTIVE:
 		val->intval = chip->otg_pulse_skip_dis;
 		break;
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	case POWER_SUPPLY_PROP_USB_PRESENT:
+		val->intval = is_usb_present(chip);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+		val->intval = 	 FULL_FCC_MAH  ;
+		break;
+#endif
 	default:
 		return -EINVAL;
 	}
@@ -4418,6 +4604,11 @@ static irqreturn_t chg_term_handler(int irq, void *_chip)
 		smbchg_charging_status_change(chip);
 		set_property_on_fg(chip, POWER_SUPPLY_PROP_CHARGE_DONE, 1);
 	}
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	if (reg & BAT_TCC_REACHED_BIT){
+          chip->chg_done_batt_full = true;
+	}
+#endif
 	return IRQ_HANDLED;
 }
 
@@ -4896,6 +5087,12 @@ static inline int get_bpd(const char *name)
 #define HVDCP_AUTH_ALG_EN_BIT		BIT(6)
 #define CMD_APSD			0x41
 #define APSD_RERUN_BIT			BIT(0)
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+#define AICL_THRESHOLD_5V_BIT BIT(0)
+#define DC_ALCL_4V_4P40  0x01
+#define DC_ALCL_4V_4P25  0x00
+#endif
+
 static int smbchg_hw_init(struct smbchg_chip *chip)
 {
 	int rc, i;
@@ -4911,6 +5108,17 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
 	pr_smb(PR_STATUS, "Charger Revision DIG: %d.%d; ANA: %d.%d\n",
 			chip->revision[DIG_MAJOR], chip->revision[DIG_MINOR],
 			chip->revision[ANA_MAJOR], chip->revision[ANA_MINOR]);
+
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	rc = smbchg_sec_masked_write(chip,
+				chip->dc_chgpth_base + CHGPTH_CFG,
+			AICL_THRESHOLD_5V_BIT , DC_ALCL_4V_4P40);
+		if (rc < 0) {
+			dev_err(chip->dev, "Couldn't set AICL threshold  rc=%d\n",
+					rc);
+		//	return rc;
+		}
+#endif
 
 	rc = smbchg_sec_masked_write(chip,
 			chip->dc_chgpth_base + AICL_WL_SEL_CFG,
@@ -5264,6 +5472,25 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
 			chip->usb_chgpth_base + USBIN_CHGR_CFG, 1);
 	if (rc < 0)
 		dev_err(chip->dev, "Couldn't read usb allowance rc=%d\n", rc);
+
+#if (defined CONFIG_ZTEMT_SUPPORT_CHARGER_5V) 
+
+       rc = smbchg_sec_masked_write(chip,
+        				chip->usb_chgpth_base + USBIN_CHGR_CFG,
+        				0xFF, USBIN_ADAPTER_5V);
+       if (rc < 0) {
+        	dev_err(chip->dev, "Couldn't write usb allowance rc=%d\n", rc);
+        	return rc;
+       }
+       rc = smbchg_sec_masked_write(chip,
+				chip->usb_chgpth_base + CHGPTH_CFG,
+				HVDCP_EN_BIT, 0);
+	if (rc < 0) {
+		dev_err(chip->dev, "Couldn't enable HVDCP rc=%d\n", rc);
+		return rc;
+	}
+
+#endif
 
 	if (chip->wipower_dyn_icl_avail) {
 		rc = smbchg_wipower_ilim_config(chip,
@@ -5981,6 +6208,227 @@ static int smbchg_check_chg_version(struct smbchg_chip *chip)
 	return rc;
 }
 
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+#define DEFAULT_PMIC_TEMP 	 0
+static int get_prop_pmic_temp(struct smbchg_chip *chip)
+{
+	int rc = 0;
+	struct qpnp_vadc_result results;
+	if(!chip->vadc_dev){
+		chip->vadc_dev = qpnp_get_vadc(chip->dev, "dcin");
+		if (IS_ERR(chip->vadc_dev)) {
+			DBG_CHARGE(" vadc_dev NULL ! \n");
+			return DEFAULT_PMIC_TEMP;
+		}
+	}
+	
+	if(chip->vadc_dev){
+		rc = qpnp_vadc_read(chip->vadc_dev,DIE_TEMP, &results);
+		if (rc) {
+			pr_err("Unable to read batt temperature rc=%d\n", rc);
+			return DEFAULT_PMIC_TEMP;
+		}
+	}
+	else
+		return DEFAULT_PMIC_TEMP;
+ 
+	pr_smb(PR_STATUS,"get_pmic_temp %d %lld\n",
+		results.adc_code, results.physical);
+	return (int)results.physical;
+}
+/*
+* Get The Charger Voltage
+*/
+#define DEFAULT_CHG_VOLTAGE_NOW	 0
+static int get_prop_charger_voltage_now(struct smbchg_chip *chip)
+{
+	int rc = 0;
+	struct qpnp_vadc_result results;
+	
+	if(!chip->vadc_dev){
+		  chip->vadc_dev = qpnp_get_vadc(chip->dev, "dcin");
+			if (IS_ERR(chip->vadc_dev)) {
+				DBG_CHARGE(" vadc_dev NULL ! \n");
+				return DEFAULT_CHG_VOLTAGE_NOW;
+		}
+	}
+
+	if(chip->vadc_dev){
+		rc = qpnp_vadc_read(chip->vadc_dev, USBIN, &results);
+		if (rc) {
+				pr_err("Unable to read usbin rc=%d\n", rc);
+				return DEFAULT_CHG_VOLTAGE_NOW ;
+			} else {
+			return results.physical;
+		}
+	}
+	else
+		return DEFAULT_CHG_VOLTAGE_NOW ;
+}
+
+#ifdef CONFIG_ZTEMT_CHARGE_PLUS_X_MODE
+#define BATTERY_NTC_COOL      0
+#define BATTERY_NTC_COLD     100
+#define BATTERY_NTC_WARM   420
+#define BATTERY_NTC_HOT      500
+void smbchg_xcharge_mode_en(struct smbchg_chip *chip ,bool xcharge_mode_en){
+	int batt_ntc_temp;
+  int batt_ntc_change;
+  unsigned int	therm_lvl;
+	union power_supply_propval prop = {0, };
+	
+	if(!chip)
+		return ;
+
+	if(!xcharge_mode_en){
+		return ;
+	}
+
+	if (chip->usb_psy && !chip->usb_psy->get_property(chip->usb_psy,
+		  POWER_SUPPLY_PROP_TYPE,	&prop)) {
+		if ((prop.intval == POWER_SUPPLY_TYPE_USB_HVDCP) ||
+							(prop.intval == POWER_SUPPLY_TYPE_USB_DCP)) {
+				 //
+		}
+		else
+			return ;
+	}
+	else
+		return ;
+	
+	if(chip->first_time_calc_lvl){
+		/*Disable the */
+		 chip->therm_lvl_sel = 0 ;
+		 chip->post_batt_ntc_temp = DEFAULT_BATT_TEMP;
+		 return ;
+	}
+	
+	batt_ntc_temp = get_prop_batt_temp(chip	);
+	batt_ntc_change =(int) abs(batt_ntc_temp-chip->post_batt_ntc_temp);
+	if( batt_ntc_change >=10)
+   	 chip->post_batt_ntc_temp =batt_ntc_temp ;
+	  
+	if((batt_ntc_temp>=BATTERY_NTC_HOT) ||
+			(batt_ntc_temp<=BATTERY_NTC_COOL))
+			/*Disable Charging*/
+				 therm_lvl = chip->thermal_levels - 2;
+	else if(batt_ntc_change>=10){
+		  pr_debug("@@@ batt_ntc_change:%d  \n ", batt_ntc_change);
+			if((batt_ntc_temp> BATTERY_NTC_WARM)||
+					(batt_ntc_temp< BATTERY_NTC_COLD))
+				  	therm_lvl = chip->thermal_levels - 3;
+		  else
+		  	/* Normal Charging Range */
+			 		 therm_lvl = chip->thermal_levels - 4;
+	}
+	else
+		/* Setting Last Current Limitation */
+		 therm_lvl = chip->therm_lvl_sel;
+	
+  pr_debug("@@@ therm_lvl_sel:%d,therm_lvl:%d \n ",
+						chip->therm_lvl_sel, therm_lvl);
+  pr_debug("@@@ curr = %d, lev = %d \n", chip->thermal_mitigation[0],chip->thermal_levels);
+  
+  smbchg_system_temp_level_set(chip,	therm_lvl);
+}
+#endif
+
+#define USB_CURRENT_REG_VAL_500mA  0x04
+static void smbchg_check_the_usb_current(struct smbchg_chip *chip)
+{
+       int rc;
+	u8 reg ,usb_curr_reg_val;
+
+       if(chip->insert_charger_type == POWER_SUPPLY_TYPE_USB){
+            rc = smbchg_read(chip, &reg, chip->usb_chgpth_base + IL_CFG, 1);
+            if (rc < 0) {
+                dev_err(chip->dev, "Unable to read IL_CFG rc = %d\n", rc);
+                return ;
+            }
+            usb_curr_reg_val = reg&USBIN_INPUT_MASK;
+            if (usb_curr_reg_val != USB_CURRENT_REG_VAL_500mA ) {
+                printk("jing smbchg_check_the_usb_current  reg:%d",reg);
+                smbchg_set_usb_current_max(chip, CURRENT_500_MA);                
+            }   
+       }       
+}
+
+#define SMBCHARGE_CONSECUTIVE_COUNT 	3
+static void
+eoc_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct smbchg_chip *chip = container_of(dwork,
+				struct smbchg_chip, zte_eoc_work);
+	static int count;
+	int eoc_period_ms;
+	bool usb_present;
+    /*
+    	struct smbchg_chip *chip = container_of(work,
+    				struct smbchg_chip,
+    				charge_check_work.work);
+    */
+      if(!chip){	return ; }
+      
+      smbchg_check_the_usb_current(chip);
+
+      DBG_CHARGE(" BATT:vol:%d,cur:%d,temp:%d,stat:%d,CHG:vol:%d,temp:%d,capacity:%d,stat:%d,cur:%d,usbin:%d \n",
+		get_prop_batt_voltage_now(chip)/1000,
+		get_prop_batt_current_now(chip)/1000,
+		get_prop_batt_temp(chip)/10,
+		get_prop_batt_status(chip),
+		get_prop_charger_voltage_now(chip)/1000,
+		get_prop_pmic_temp(chip)/1000,
+		get_prop_batt_capacity(chip),
+		get_prop_charge_type(chip),
+		chip->usb_target_current_ma,
+		chip->usb_present);
+
+        usb_present = is_usb_present(chip) ;
+        if( usb_present ){
+        	count = 0;
+        	#ifdef CONFIG_ZTEMT_CHARGE_PLUS_X_MODE
+        	smbchg_xcharge_mode_en(chip,true);
+        	#endif
+        } else {
+        	if (count >= SMBCHARGE_CONSECUTIVE_COUNT) {
+        		goto stop_work;
+        	}else{
+        		count += 1;
+        		DBG_CHARGE("WD Count = %d \n", count);
+        	}
+        }
+
+	if(count){
+		eoc_period_ms =ZTE_EOC_PERIOD_FAST_MS;
+	}else{
+		eoc_period_ms =ZTE_EOC_PERIOD_LOW_MS;
+	}
+	schedule_delayed_work(&chip->zte_eoc_work,
+			msecs_to_jiffies(eoc_period_ms));
+	return;
+	
+stop_work:
+	count = 0;
+	DBG_CHARGE("Stop Check Work!\n");
+	//smbchg_relax(chip,PM_REASON_EOC_CHECK);
+	if(wake_lock_active(&chip->eoc_wake_lock))
+			wake_unlock(&chip->eoc_wake_lock);	
+}
+
+static void  
+start_eoc_work(struct smbchg_chip *chip)
+{
+  if(!chip) return ;
+	//smbchg_stay_awake(chip,PM_REASON_EOC_CHECK);
+	if ( !wake_lock_active(&chip->eoc_wake_lock)) {
+			wake_lock(&chip->eoc_wake_lock);
+	}
+	schedule_delayed_work(&chip->zte_eoc_work,
+					msecs_to_jiffies(ZTE_EOC_PERIOD_FAST_MS));
+}
+#endif
+
 static int smbchg_probe(struct spmi_device *spmi)
 {
 	int rc;
@@ -6022,6 +6470,9 @@ static int smbchg_probe(struct spmi_device *spmi)
 	chip->usb_psy = usb_psy;
 	chip->fake_battery_soc = -EINVAL;
 	chip->usb_online = -EINVAL;
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	 chip->bad_charger =  false;
+#endif	
 	dev_set_drvdata(&spmi->dev, chip);
 
 	spin_lock_init(&chip->sec_access_lock);
@@ -6037,6 +6488,12 @@ static int smbchg_probe(struct spmi_device *spmi)
 	mutex_init(&chip->wipower_config);
 	mutex_init(&chip->usb_status_lock);
 	device_init_wakeup(chip->dev, true);
+
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	INIT_DELAYED_WORK(&chip->zte_eoc_work,  eoc_work);
+	wake_lock_init(&chip->eoc_wake_lock, WAKE_LOCK_SUSPEND,
+			"zte_eoc_lock");
+#endif
 
 	rc = smbchg_parse_peripherals(chip);
 	if (rc) {
@@ -6130,6 +6587,12 @@ static int smbchg_probe(struct spmi_device *spmi)
 			chip->revision[ANA_MAJOR], chip->revision[ANA_MINOR],
 			get_prop_batt_present(chip),
 			chip->dc_present, chip->usb_present);
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+        if((chip->dc_present|| chip->usb_present)&&(chip->batt_present )){
+            smbchg_charging_en(chip, true);
+        }
+        start_eoc_work(chip);  
+#endif
 	return 0;
 
 unregister_dc_psy:

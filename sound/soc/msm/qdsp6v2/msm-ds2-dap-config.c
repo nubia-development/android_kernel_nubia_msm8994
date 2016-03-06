@@ -1935,6 +1935,10 @@ int msm_ds2_dap_init(int port_id, int copp_idx, int channels,
 				(dev_map[i].device_id &
 				ds2_dap_params_states.device)) {
 				idx = i;
+				if (dev_map[i].device_id == EARPIECE){
+					pr_debug("%s: Ignore EARPIECE\n", __func__);
+					continue;
+				}
 				/* Give priority to headset in case of
 				   combo device */
 				if (dev_map[i].device_id == SPEAKER)

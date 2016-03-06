@@ -29,6 +29,21 @@
 #include <linux/regulator/machine.h>
 #include <linux/pinctrl/consumer.h>
 
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+static int debug_mask_smb1357 = 0;
+module_param_named(debug_mask_smb1357, debug_mask_smb1357, int, S_IRUSR | S_IWUSR);
+#define DBG_SMB1357(x...)   do {if (debug_mask_smb1357) pr_info(">>ZTEMT_CHARGE>>  " x); } while (0)
+#endif
+
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+#define  DEBUG
+//打开调试接口
+//#undef pr_debug
+//#define pr_debug   pr_info
+#undef KERN_INFO
+#define KERN_INFO KERN_ERR
+#endif
+
 #define SMB135X_BITS_PER_REG	8
 
 /* Mask/Bit helpers */
@@ -4111,6 +4126,10 @@ static int smb135x_main_charger_probe(struct i2c_client *client,
 		return rc;
 	}
 
+ #ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+  return -EINVAL ;
+ #endif
+ 
 	usb_psy = power_supply_get_by_name("usb");
 	if (!usb_psy && chip->chg_enabled) {
 		dev_dbg(&client->dev, "USB supply not found; defer probe\n");
@@ -4262,6 +4281,9 @@ static int smb135x_parallel_charger_probe(struct i2c_client *client,
 
 	chip->chg_enabled = !(of_property_read_bool(node,
 						"qcom,charging-disabled"));
+#ifdef CONFIG_ZTEMT_MSM8994_CHARGER
+	chip->chg_enabled = true;
+#endif
 
 	rc = of_property_read_u32(node, "qcom,recharge-thresh-mv",
 						&chip->resume_delta_mv);

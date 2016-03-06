@@ -30,6 +30,30 @@ enum android_pm_qos_state {
 	MAX_VOTES = NO_USB_VOTE,
 };
 
+
+#ifdef CONFIG_ZTEMT_USB_CONFIGURATION
+/* This structure keeps information per regulator */
+struct usb_reg_data {
+	/* voltage regulator handle */
+	struct regulator *reg;
+	/* regulator name */
+	const char *name;
+	/* voltage level to be set */
+	u32 low_vol_level;
+	u32 high_vol_level;
+	/* Load values for low power and high power mode */
+	u32 lpm_uA;
+	u32 hpm_uA;
+
+	/* is this regulator enabled? */
+	bool is_enabled;
+	/* is this regulator needs to be always on? */
+	bool is_always_on;
+	/* is low power mode setting required for this regulator? */
+	bool lpm_sup;
+	bool set_voltage_sup;
+};
+#endif
 struct android_usb_platform_data {
 	int (*update_pid_and_serial_num)(uint32_t, const char *);
 	u32 pm_qos_latency[MAX_VOTES];
@@ -38,6 +62,11 @@ struct android_usb_platform_data {
 	int  streaming_func_count;
 	u8 uicc_nluns;
 	bool cdrom;
+#ifdef CONFIG_ZTEMT_USB_CONFIGURATION
+	bool internal_sdcard_support;
+	bool external_sdcard_support;
+	struct usb_reg_data *vreg_data;
+#endif
 };
 
 #ifndef CONFIG_TARGET_CORE

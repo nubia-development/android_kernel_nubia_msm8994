@@ -17,6 +17,10 @@
 #include "msm_actuator.h"
 #include "msm_cci.h"
 
+// ZTEMT: fuyipeng add manual AF for imx234  -----start
+#define ZTE_ACTUATOR_MAF_OFFSET 100
+// ZTEMT: fuyipeng add manual AF for imx234  -----end
+
 DEFINE_MSM_MUTEX(msm_actuator_mutex);
 
 #undef CDBG
@@ -26,7 +30,15 @@ DEFINE_MSM_MUTEX(msm_actuator_mutex);
 #define PARK_LENS_MID_STEP 5
 #define PARK_LENS_SMALL_STEP 3
 #define MAX_QVALUE 4096
-
+/*ZTEMT:wangkai add sharp ois af driver-----Start*/
+#ifdef CONFIG_IMX234_OIS_SHARP
+unsigned short af_start_value_lc898122_sharp = 0;
+unsigned short af_infinity_value_lc898122_sharp = 0;
+unsigned short af_macro_value_lc898122_sharp = 0;
+extern void msm_af_reg_write_lc898122_sharp(unsigned short reg_addr, unsigned char write_data_8);
+extern unsigned char macro_limit_flag;
+#endif
+/*ZTEMT:wangkai add sharp ois af driver-----End*/
 static struct v4l2_file_operations msm_actuator_v4l2_subdev_fops;
 static int32_t msm_actuator_power_up(struct msm_actuator_ctrl_t *a_ctrl);
 static int32_t msm_actuator_power_down(struct msm_actuator_ctrl_t *a_ctrl);
@@ -85,6 +97,13 @@ static void msm_actuator_parse_i2c_params(struct msm_actuator_ctrl_t *a_ctrl,
 	uint16_t value = 0;
 	uint32_t size = a_ctrl->reg_tbl_size, i = 0;
 	struct msm_camera_i2c_reg_array *i2c_tbl = a_ctrl->i2c_reg_tbl;
+	#ifdef CONFIG_IMX234_OIS_SHARP
+	if (next_lens_position>=af_macro_value_lc898122_sharp && macro_limit_flag == 0x1)
+	{
+	    next_lens_position = af_macro_value_lc898122_sharp;
+		//printk("k_debug after next_lens_position = %d\n",next_lens_position);
+	}
+    #endif
 	CDBG("Enter\n");
 	for (i = 0; i < size; i++) {
 		/* check that the index into i2c_tbl cannot grow larger that
@@ -102,6 +121,22 @@ static void msm_actuator_parse_i2c_params(struct msm_actuator_ctrl_t *a_ctrl,
 				i2c_byte1 = write_arr[i].reg_addr;
 				i2c_byte2 = value;
 				if (size != (i+1)) {
+					/*ZTEMT:wangkai add sharp ois af driver-----Start*/
+					#ifdef CONFIG_IMX234_OIS_SHARP
+					i2c_byte2 = ((value & 0x0700) >> 8)|0x04;
+					CDBG("byte1:0x%x, byte2:0x%x\n",
+						i2c_byte1, i2c_byte2);
+					i2c_tbl[a_ctrl->i2c_tbl_index].
+						reg_addr = i2c_byte1;
+					i2c_tbl[a_ctrl->i2c_tbl_index].
+						reg_data = i2c_byte2;
+					i2c_tbl[a_ctrl->i2c_tbl_index].
+						delay = 0;
+					a_ctrl->i2c_tbl_index++;
+					i++;
+					i2c_byte1 = write_arr[i].reg_addr;
+					i2c_byte2 = value & 0xFF;
+			        #else
 					i2c_byte2 = value & 0xFF;
 					CDBG("byte1:0x%x, byte2:0x%x\n",
 						i2c_byte1, i2c_byte2);
@@ -115,6 +150,8 @@ static void msm_actuator_parse_i2c_params(struct msm_actuator_ctrl_t *a_ctrl,
 					i++;
 					i2c_byte1 = write_arr[i].reg_addr;
 					i2c_byte2 = (value & 0xFF00) >> 8;
+					#endif
+					/*ZTEMT:wangkai add sharp ois af driver-----End*/
 				}
 			} else {
 				i2c_byte1 = (value & 0xFF00) >> 8;
@@ -350,6 +387,15 @@ static int32_t msm_actuator_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
 	CDBG("Enter\n");
 
 	save_addr_type = a_ctrl->i2c_client.addr_type;
+	/*ZTEMT:wangkai add sharp ois af driver-----Start*/
+	#ifdef CONFIG_IMX234_OIS_SHARP
+       i = 0;
+	if ((a_ctrl->act_device_type == MSM_CAMERA_PLATFORM_DEVICE) && \
+		(a_ctrl->i2c_client.cci_client->sid == 0x48 >> 1)) {
+		 rc = 0;
+               //printk(" goto init sharp lc898122 focus\n");
+	}
+	#else
 	for (i = 0; i < size; i++) {
 
 		switch (settings[i].addr_type) {
@@ -392,7 +438,8 @@ static int32_t msm_actuator_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
 			break;
 		}
 	}
-
+    #endif
+	/*ZTEMT:wangkai add sharp ois af driver-----End*/
 	a_ctrl->curr_step_pos = 0;
 	/*
 	 * Recover register addr_type after the init
@@ -1030,11 +1077,14 @@ static int32_t msm_actuator_set_position(
 	struct msm_actuator_ctrl_t *a_ctrl,
 	struct msm_actuator_set_position_t *set_pos)
 {
-	int32_t rc = 0;
-	int32_t index;
-	uint16_t next_lens_position;
-	uint16_t delay;
-	uint32_t hw_params = 0;
+    int32_t rc = 0;
+    int32_t index;
+    uint16_t next_lens_position;
+    uint16_t delay;
+    uint32_t hw_params = 0;
+    // ZTEMT: fuyipeng add manual AF for imx234  -----start
+      int value=0;
+      // ZTEMT: fuyipeng add manual AF for imx234  -----end
 	struct msm_camera_i2c_reg_setting reg_setting;
 	CDBG("%s Enter %d\n", __func__, __LINE__);
 	if (set_pos->number_of_steps <= 0 ||
@@ -1043,14 +1093,72 @@ static int32_t msm_actuator_set_position(
 			set_pos->number_of_steps);
 		return -EFAULT;
 	}
+         
+      // ZTEMT: fuyipeng add manual AF for imx234  -----start
+      pr_err("msm_actuator_set_position---act_name:%s \n", a_ctrl->act_name);
+      if (!strncmp(a_ctrl->act_name, "rohm_bu64297gwz", 32)) 
+      {
+          hw_params = 0xF400;
+      }
+      // ZTEMT: fuyipeng add manual AF for imx234  -----end
 
-	a_ctrl->i2c_tbl_index = 0;
-	for (index = 0; index < set_pos->number_of_steps; index++) {
-		next_lens_position = set_pos->pos[index];
-		delay = set_pos->delay[index];
-		a_ctrl->func_tbl->actuator_parse_i2c_params(a_ctrl,
-		next_lens_position, hw_params, delay);
+    a_ctrl->i2c_tbl_index = 0;
+    for (index = 0; index < set_pos->number_of_steps; index++) {
+        next_lens_position = set_pos->pos[index];
+        delay = set_pos->delay[index];
 
+        // ZTEMT: fuyipeng add manual AF for imx234  -----start
+        value = set_pos->pos[index];
+
+        //ZTEMT jixd 20150310 add manual AF protection ----Start
+        if(value < 0){
+            value = 0;
+        }else if(value>79){
+            value = 79;
+        }
+        //ZTEMT jixd 20150310 add manual AF protection ----End
+        
+        value = 79 - value;
+        if(value == 79)
+        {
+            next_lens_position = a_ctrl->region_params[a_ctrl->region_size - 1].step_bound[MOVE_NEAR] + 
+                a_ctrl->step_position_table[0] + ZTE_ACTUATOR_MAF_OFFSET;
+            if (next_lens_position > 1000)
+            {
+                next_lens_position = 1000;
+            }
+            a_ctrl->curr_step_pos = a_ctrl->region_params[a_ctrl->region_size - 1].step_bound[MOVE_NEAR] - 3;
+        }
+        else
+        {
+            int code_total = 0;
+            int16_t far_end = a_ctrl->region_params[a_ctrl->region_size - 1].step_bound[MOVE_NEAR] - 1;
+             //ZTEMT jixd 20150228 add manual AF DAC compensation ----Start
+             if(0 == a_ctrl->infinity_pos)
+             {
+                
+                code_total = a_ctrl->region_params[a_ctrl->region_size - 1].step_bound[MOVE_NEAR] - set_pos->dac_comp;
+                next_lens_position = a_ctrl->step_position_table[0] + set_pos->dac_comp + (code_total * value/79);
+             }
+             else
+             {
+                 code_total = a_ctrl->infinity_pos - set_pos->dac_comp;
+                 next_lens_position = a_ctrl->step_position_table[0]
+                    + (a_ctrl->region_params[a_ctrl->region_size - 1].step_bound[MOVE_NEAR] - a_ctrl->infinity_pos - 1) 
+                    + set_pos->dac_comp + (code_total * value / 79);                    
+
+             }
+             pr_err("infinity_pos is:%d,next_position is:%d,init_code is:%d",
+                a_ctrl->infinity_pos,next_lens_position,a_ctrl->step_position_table[0]);
+
+             a_ctrl->curr_step_pos = next_lens_position - a_ctrl->step_position_table[0];
+             a_ctrl->curr_step_pos = (a_ctrl->curr_step_pos < 0)? 0 : a_ctrl->curr_step_pos;
+             a_ctrl->curr_step_pos = (a_ctrl->curr_step_pos > far_end)? far_end : a_ctrl->curr_step_pos;
+             //ZTEMT jixd 20150228 add manual AF DAC compensation ----End
+        }
+        // ZTEMT: fuyipeng add manual AF for imx234  -----end
+
+        a_ctrl->func_tbl->actuator_parse_i2c_params(a_ctrl, next_lens_position, hw_params, delay);
 		reg_setting.reg_setting = a_ctrl->i2c_reg_tbl;
 		reg_setting.size = a_ctrl->i2c_tbl_index;
 		reg_setting.data_type = a_ctrl->i2c_data_type;
@@ -1280,6 +1388,18 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 			pr_err("init table failed %d\n", rc);
 		break;
 
+      // ZTEMT: fuyipeng add for manual AF -----start
+      case CFG_SET_ACTUATOR_NAME:
+            if (NULL != cdata->cfg.act_name)
+            {
+                memcpy(a_ctrl->act_name,
+                 	     cdata->cfg.act_name,
+                 	     sizeof(a_ctrl->act_name));
+                pr_err("CFG_SET_ACTUATOR_NAME ---act_name:%s \n", a_ctrl->act_name);
+            }
+	      break;
+      // ZTEMT: fuyipeng add for manual AF -----end
+
 	case CFG_SET_DEFAULT_FOCUS:
 		rc = a_ctrl->func_tbl->actuator_set_default_focus(a_ctrl,
 			&cdata->cfg.move);
@@ -1311,7 +1431,12 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 		if (rc < 0)
 			pr_err("Failed actuator power up%d\n", rc);
 		break;
-
+     /*ZTEMT:jixd add for af infinity calibration -----start*/
+     case CFG_SET_INFINITY_POS:
+        a_ctrl->infinity_pos = cdata->cfg.infinity_pos;
+        pr_err("SET_INFINITY_POS %d\n", a_ctrl->infinity_pos);
+        break;
+     /*ZTEMT:jixd add for af infinity calibration -----end*/
 	default:
 		break;
 	}
@@ -1504,6 +1629,15 @@ static long msm_actuator_subdev_do_ioctl(
 
 			parg = &actuator_data;
 			break;
+
+            // ZTEMT: fuyipeng add for manual AF -----start
+            case  CFG_SET_ACTUATOR_NAME:
+                   actuator_data.cfgtype = u32->cfgtype;
+                   actuator_data.cfg.act_name = u32->cfg.act_name;
+                   parg = &actuator_data;
+			break;
+            // ZTEMT: fuyipeng add for manual AF -----end
+
 		case CFG_SET_DEFAULT_FOCUS:
 		case CFG_MOVE_FOCUS:
 			actuator_data.cfgtype = u32->cfgtype;
@@ -1532,6 +1666,14 @@ static long msm_actuator_subdev_do_ioctl(
 			memcpy(&actuator_data.cfg.setpos, &(u32->cfg.setpos),
 				sizeof(struct msm_actuator_set_position_t));
 			break;
+        /*ZTEMT:jixd add for af infinity calibration -----start*/
+        case CFG_SET_INFINITY_POS:
+           actuator_data.cfgtype = u32->cfgtype;
+           actuator_data.cfg.infinity_pos = u32->cfg.infinity_pos;
+           parg = &actuator_data;
+           break;
+        /*ZTEMT:jixd add for af infinity calibration -----end*/
+
 		default:
 			actuator_data.cfgtype = u32->cfgtype;
 			parg = &actuator_data;
