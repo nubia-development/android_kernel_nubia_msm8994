@@ -275,10 +275,7 @@
 	};
 };
 
-#include "../dsi-panel-sharp-dualmipi0-wqxga-video.dtsi"
-#include "../dsi-panel-sharp-dualmipi1-wqxga-video.dtsi"
-#include "../dsi-panel-jdi-1080p-video.dtsi"
-#include "../dsi-panel-sharp-1080p-cmd.dtsi"
+#include "zte-dsi-panel-sharp-r63417-1080p-5p5-cmd.dtsi"
 
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
@@ -295,32 +292,23 @@
 };
 
 &mdss_dsi0 {
-	qcom,dsi-pref-prim-pan = <&dsi_dual_sharp_video_0>;
+	qcom,dsi-pref-prim-pan = <&dsi_sp_1080p_5p5>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
-	pinctrl-0 = <&mdss_dsi_active>;
-	pinctrl-1 = <&mdss_dsi_suspend>;
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
 	qcom,dsi-panel-bias-vreg;
 	qcom,platform-reset-gpio = <&msm_gpio 78 0>;
-	qcom,platform-bklight-en-gpio = <&pmi8994_gpios 2 0>;
-        qcom,platform-enable-gpio = <&pm8994_gpios 14 0>;
+	qcom,platform-te-gpio = <&msm_gpio 10 0>;
 };
 
 &mdss_dsi1 {
-	qcom,dsi-pref-prim-pan = <&dsi_dual_sharp_video_1>;
+	status = "no";
 };
 
-&dsi_sharp_1080_cmd {
-	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
-	qcom,mdss-dsi-bl-min-level = <1>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
+&dsi_sp_1080p_5p5 {
 	qcom,cont-splash-enabled;
-};
-
-&dsi_jdi_1080_vid {
-	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
-	qcom,mdss-dsi-bl-min-level = <1>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
-	qcom,cont-splash-enabled;
+	qcom,disable-dimming-when-suspend;
+	qcom,disable-dimming-when-resume;
 };
 
 &labibb {
@@ -330,23 +318,6 @@
 
 &ibb_regulator {
 	qcom,qpnp-ibb-discharge-resistor = <32>;
-};
-
-&dsi_dual_sharp_video_0 {
-	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
-	qcom,mdss-dsi-bl-min-level = <1>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
-	qcom,cont-splash-enabled;
-	qcom,mdss-dsi-pan-enable-dynamic-fps;
-	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
-	qcom,mdss-dsi-min-refresh-rate = <30>;
-};
-
-&dsi_dual_sharp_video_1 {
-	qcom,cont-splash-enabled;
-	qcom,mdss-dsi-pan-enable-dynamic-fps;
-	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
-	qcom,mdss-dsi-min-refresh-rate = <30>;
 };
 
 &pmx_hdmi_cec {
