@@ -224,6 +224,10 @@ dtb-$(CONFIG_ARCH_APQ8084) += apq8084-v1.0-old-pwr-grid-liquid.dtb \
 	apq8084-v1.1-old-pwr-grid-mdm9x35-alt-cdp.dtb \
 	apq8084-v1.1-mdm9x35-alt-cdp.dtb \
 	apq8084-v1.1-sbc.dtb
+ifeq ($(CONFIG_MACH_ZTE_NX510J),y)
+dtb-$(CONFIG_ARCH_MSM8994) += msm8994-v2.0-nx510j.dtb \
+	msm8994-v2.1-nx510j.dtb
+else
 dtb-$(CONFIG_ARCH_MSM8994) += msm8994-v1-sim.dtb \
 	msm8994-rumi.dtb \
 	msm8994-v1-cdp.dtb \
@@ -260,6 +264,7 @@ dtb-$(CONFIG_ARCH_MSM8994) += msm8994-v1-sim.dtb \
 	apq8094-v2.1-liquid.dtb \
 	apq8094-v2.1-fluid.dtb \
 	apq8094-v2.1-dragonboard.dtb
+endif
 
 dtb-$(CONFIG_ARCH_MSM8992) += msm8992-sim.dtb \
 	msm8992-rumi.dtb \
