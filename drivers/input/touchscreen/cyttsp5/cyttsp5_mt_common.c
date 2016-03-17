@@ -420,9 +420,9 @@ static void cyttsp5_mt_send_dummy_event(struct cyttsp5_mt_data *md)
 	switch (gesture_id) {
 		case GESTURE_DOUBLE_CLICK:
 			dev_err(md->dev, "Double Click.\n");
-			input_report_key(md->input, KEY_POWER, 1);
+			input_report_key(md->input, KEY_WAKEUP, 1);
 			input_sync(md->input);
-			input_report_key(md->input, KEY_POWER, 0);
+			input_report_key(md->input, KEY_WAKEUP, 0);
 			input_sync(md->input);
 			break;
 		case GESTURE_LETTER_w:
@@ -625,7 +625,7 @@ static int cyttsp5_setup_input_device(struct device *dev)
 	__set_bit(KEY_F7, md->input->keybit); 
 	__set_bit(KEY_F8, md->input->keybit); 
 	__set_bit(KEY_F9, md->input->keybit); 
-	__set_bit(KEY_POWER, md->input->keybit);
+	__set_bit(KEY_WAKEUP, md->input->keybit);
     __set_bit(KEY_F11, md->input->keybit); 
 	__set_bit(KEY_F12, md->input->keybit); 
 	__set_bit(KEY_F1, md->input->keybit); 
