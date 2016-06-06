@@ -273,11 +273,9 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 	}
 }
 
-#define MDSS_DEFAULT_BL_BRIGHTNESS 61
 static struct led_classdev backlight_led = {
 	.name           = "lcd-backlight",
-	//.brightness     = MDSS_MAX_BL_BRIGHTNESS,
-	.brightness     = MDSS_DEFAULT_BL_BRIGHTNESS,
+	.brightness     = MDSS_MAX_BL_BRIGHTNESS,
 	.brightness_set = mdss_fb_set_bl_brightness,
 	.max_brightness = MDSS_MAX_BL_BRIGHTNESS,
 };
@@ -1003,11 +1001,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 
 	/* android supports only one lcd-backlight/lcd for now */
 	if (!lcd_backlight_registered) {
-	#ifndef CONFIG_ZTEMT_LCD_BRIGHTNESS_COMMON
 		backlight_led.brightness = mfd->panel_info->brightness_max;
-	#else
-		backlight_led.brightness = MDSS_DEFAULT_BL_BRIGHTNESS;
-	#endif
 		backlight_led.max_brightness = mfd->panel_info->brightness_max;
 		if (led_classdev_register(&pdev->dev, &backlight_led))
 			pr_err("led_classdev_register failed\n");
