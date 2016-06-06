@@ -606,7 +606,7 @@ static int bcm2079x_probe(struct i2c_client *client,
 {
 	int ret;
 	struct bcm2079x_dev *bcm2079x_dev;
-	struct bcm2079x_platform_data *platform_data;
+	struct bcm2079x_platform_data *platform_data = NULL;
 
 	/*platform_data = client->dev.platform_data;
 

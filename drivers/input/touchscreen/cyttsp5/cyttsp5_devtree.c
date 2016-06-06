@@ -542,7 +542,7 @@ static struct cyttsp5_core_platform_data *create_and_get_core_pdata(
 {
 	struct cyttsp5_core_platform_data *pdata;
 	u32 value;
-	int rc;
+	int rc = 0;
 	int i;
 
 	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
