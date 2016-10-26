@@ -375,16 +375,16 @@ static struct mount *next_descendent(struct mount *root, struct mount *cur)
 	return NULL;
 }
 
-void propagate_remount(struct mount *mnt)
-{
-	struct mount *m = mnt;
+int propagate_remount(struct mount *mnt) {
+	struct mount *m;
 	struct super_block *sb = mnt->mnt.mnt_sb;
+	int ret = 0;
 
 	if (sb->s_op->copy_mnt_data) {
-		m = next_descendent(mnt, m);
-		while (m) {
+		for (m = first_slave(mnt); m->mnt_slave.next != &mnt->mnt_slave_list; m = next_slave(m)) {
 			sb->s_op->copy_mnt_data(m->mnt.data, mnt->mnt.data);
-			m = next_descendent(mnt, m);
 		}
 	}
+
+	return ret;
 }
