@@ -207,11 +207,6 @@ DECLARE_EVENT_CLASS(kgsl_pwr_template,
 	)
 );
 
-DEFINE_EVENT(kgsl_pwr_template, kgsl_clk,
-	TP_PROTO(struct kgsl_device *device, int on),
-	TP_ARGS(device, on)
-);
-
 DEFINE_EVENT(kgsl_pwr_template, kgsl_irq,
 	TP_PROTO(struct kgsl_device *device, int on),
 	TP_ARGS(device, on)
@@ -227,31 +222,66 @@ DEFINE_EVENT(kgsl_pwr_template, kgsl_rail,
 	TP_ARGS(device, on)
 );
 
+TRACE_EVENT(kgsl_clk,
+
+	TP_PROTO(struct kgsl_device *device, unsigned int on,
+		unsigned int freq),
+
+	TP_ARGS(device, on, freq),
+
+	TP_STRUCT__entry(
+		__string(device_name, device->name)
+		__field(int, on)
+		__field(unsigned int, freq)
+	),
+
+	TP_fast_assign(
+		__assign_str(device_name, device->name);
+		__entry->on = on;
+		__entry->freq = freq;
+	),
+
+	TP_printk(
+		"d_name=%s flag=%s active_freq=%d",
+		__get_str(device_name),
+		__entry->on ? "on" : "off",
+		__entry->freq
+	)
+);
 
 TRACE_EVENT(kgsl_pwrlevel,
 
-	TP_PROTO(struct kgsl_device *device, unsigned int pwrlevel,
-		unsigned int freq),
+	TP_PROTO(struct kgsl_device *device,
+		unsigned int pwrlevel,
+		unsigned int freq,
+		unsigned int prev_pwrlevel,
+		unsigned int prev_freq),
 
-	TP_ARGS(device, pwrlevel, freq),
+	TP_ARGS(device, pwrlevel, freq, prev_pwrlevel, prev_freq),
 
 	TP_STRUCT__entry(
 		__string(device_name, device->name)
 		__field(unsigned int, pwrlevel)
 		__field(unsigned int, freq)
+		__field(unsigned int, prev_pwrlevel)
+		__field(unsigned int, prev_freq)
 	),
 
 	TP_fast_assign(
 		__assign_str(device_name, device->name);
 		__entry->pwrlevel = pwrlevel;
 		__entry->freq = freq;
+		__entry->prev_pwrlevel = prev_pwrlevel;
+		__entry->prev_freq = prev_freq;
 	),
 
 	TP_printk(
-		"d_name=%s pwrlevel=%d freq=%d",
+		"d_name=%s pwrlevel=%d freq=%d prev_pwrlevel=%d prev_freq=%d",
 		__get_str(device_name),
 		__entry->pwrlevel,
-		__entry->freq
+		__entry->freq,
+		__entry->prev_pwrlevel,
+		__entry->prev_freq
 	)
 );
 
@@ -1076,112 +1106,6 @@ TRACE_EVENT(kgsl_msg,
 		"%s", __get_str(msg)
 	)
 );
-
-TRACE_EVENT(kgsl_sharedmem_page_alloc,
-	    TP_PROTO(size_t size, size_t page_size, unsigned int align),
-	    TP_ARGS(size, page_size, align),
-	    TP_STRUCT__entry(
-			     __field(size_t, size)
-			     __field(size_t, page_size)
-			     __field(unsigned int, align)
-	    ),
-	    TP_fast_assign(
-			   __entry->size      = size;
-			   __entry->page_size = page_size;
-			   __entry->align     = align;
-	    ),
-	    TP_printk(
-		      "size=%zu, page_size=%zu, align=%u", __entry->size, __entry->page_size, __entry->align
-	    )
-);
-
-TRACE_EVENT(kgsl_page_pool_alloc_pages_begin,
-	    TP_PROTO(unsigned int order),
-	    TP_ARGS(order),
-	    TP_STRUCT__entry(
-			     __field(unsigned int, order)
-	    ),
-	    TP_fast_assign(
-			   __entry->order = order
-	    ),
-	    TP_printk(
-		      "order=%u", __entry->order
-	    )
-);
-
-TRACE_EVENT(kgsl_page_pool_alloc_pages_end,
-	    TP_PROTO(unsigned int order,
-		     struct page *page),
-	    TP_ARGS(order, page),
-	    TP_STRUCT__entry(
-			     __field(unsigned int, order)
-			     __field(struct page*, page)
-	    ),
-	    TP_fast_assign(
-			   __entry->order = order;
-			   __entry->page  = page;
-	    ),
-	    TP_printk(
-		      "order=%u, page=%p", __entry->order, __entry->page
-	    )
-);
-
-TRACE_EVENT(kgsl_page_pool_zero_begin,
-	    TP_PROTO(unsigned int order),
-	    TP_ARGS(order),
-	    TP_STRUCT__entry(
-			     __field(unsigned int, order)
-	    ),
-	    TP_fast_assign(
-			   __entry->order = order
-	    ),
-	    TP_printk(
-		      "order=%u", __entry->order
-	    )
-);
-
-TRACE_EVENT(kgsl_page_pool_zero_end,
-	    TP_PROTO(unsigned int order),
-	    TP_ARGS(order),
-	    TP_STRUCT__entry(
-			     __field(unsigned int, order)
-	    ),
-	    TP_fast_assign(
-			   __entry->order = order
-	    ),
-	    TP_printk(
-		      "order=%u", __entry->order
-	    )
-);
-
-TRACE_EVENT(kgsl_page_pool_alloc_begin,
-	    TP_PROTO(unsigned int order),
-	    TP_ARGS(order),
-	    TP_STRUCT__entry(
-			     __field(unsigned int, order)
-	    ),
-	    TP_fast_assign(
-			   __entry->order = order
-	    ),
-	    TP_printk(
-		      "order=%u", __entry->order
-	    )
-);
-
-TRACE_EVENT(kgsl_page_pool_alloc_end,
-	    TP_PROTO(unsigned int order),
-	    TP_ARGS(order),
-	    TP_STRUCT__entry(
-			     __field(unsigned int, order)
-	    ),
-	    TP_fast_assign(
-			   __entry->order = order
-	    ),
-	    TP_printk(
-		      "order=%u", __entry->order
-	    )
-);
-
 
 
 #endif /* _KGSL_TRACE_H */

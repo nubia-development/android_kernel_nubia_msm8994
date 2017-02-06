@@ -56,6 +56,9 @@
 #define _ZONE ZONE_NORMAL
 #endif
 
+#define CREATE_TRACE_POINTS
+#include "trace/lowmemorykiller.h"
+
 static uint32_t lowmem_debug_level = 1;
 static short lowmem_adj[6] = {
 	0,

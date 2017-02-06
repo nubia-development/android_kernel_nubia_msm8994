@@ -179,7 +179,7 @@ static ssize_t uid_remove_write(struct file *file,
 	for (; uid_start <= uid_end; uid_start++) {
 		hash_for_each_possible_safe(hash_table, uid_entry, tmp,
 							hash, (uid_t)uid_start) {
-			if(uid_start == uid_entry->uid) {
+			if (uid_start == uid_entry->uid) {
 				hash_del(&uid_entry->hash);
 				kfree(uid_entry);
 			}

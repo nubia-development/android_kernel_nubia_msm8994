@@ -1165,7 +1165,7 @@ struct mdss_mdp_data *__mdp_overlay_buf_alloc(struct msm_fb_data_type *mfd,
 	list_move_tail(&buf->buf_list, &mdp5_data->bufs_used);
 	list_add_tail(&buf->pipe_list, &pipe->buf_queue);
 
-	pr_debug("buffer alloc: %p\n", buf);
+	pr_debug("buffer alloc: %pK\n", buf);
 
 	return buf;
 }
@@ -1218,7 +1218,7 @@ static void __mdp_overlay_buf_free(struct msm_fb_data_type *mfd,
 	buf->last_freed = local_clock();
 	buf->state = MDP_BUF_STATE_UNUSED;
 
-	pr_debug("buffer freed: %p\n", buf);
+	pr_debug("buffer freed: %pK\n", buf);
 
 	list_move_tail(&buf->buf_list, &mdp5_data->bufs_pool);
 }
@@ -1556,7 +1556,7 @@ static int __overlay_queue_pipes(struct msm_fb_data_type *mfd)
 		if (buf) {
 			switch (buf->state) {
 			case MDP_BUF_STATE_READY:
-				pr_debug("pnum=%d buf=%p first buffer ready\n",
+				pr_debug("pnum=%d buf=%pK first buffer ready\n",
 						pipe->num, buf);
 				break;
 			case MDP_BUF_STATE_ACTIVE:
@@ -1576,7 +1576,7 @@ static int __overlay_queue_pipes(struct msm_fb_data_type *mfd)
 				}
 				break;
 			default:
-				pr_err("invalid state of buf %p=%d\n",
+				pr_err("invalid state of buf %pK=%d\n",
 						buf, buf->state);
 				BUG();
 				break;
@@ -4168,16 +4168,20 @@ static int __mdss_overlay_src_split_sort(struct msm_fb_data_type *mfd,
 		__overlay_swap_func);
 
 	for (i = 0; i < num_ovs; i++) {
+		if (ovs[i].z_order >= MDSS_MDP_MAX_STAGE) {
+			pr_err("invalid stage:%u\n", ovs[i].z_order);
+			return -EINVAL;
+		}
 		if (ovs[i].dst_rect.x < left_lm_w) {
 			if (left_lm_zo_cnt[ovs[i].z_order] == 2) {
-				pr_err("more than 2 ov @ stage%d on left lm\n",
+				pr_err("more than 2 ov @ stage%u on left lm\n",
 					ovs[i].z_order);
 				return -EINVAL;
 			}
 			left_lm_zo_cnt[ovs[i].z_order]++;
 		} else {
 			if (right_lm_zo_cnt[ovs[i].z_order] == 2) {
-				pr_err("more than 2 ov @ stage%d on right lm\n",
+				pr_err("more than 2 ov @ stage%u on right lm\n",
 					ovs[i].z_order);
 				return -EINVAL;
 			}
@@ -4628,16 +4632,22 @@ static int mdss_mdp_overlay_on(struct msm_fb_data_type *mfd)
 	if (!mfd->panel_info->cont_splash_enabled &&
 		(mfd->panel_info->type != DTV_PANEL)) {
 		rc = mdss_mdp_overlay_start(mfd);
-		if (rc)
+		if (rc) {
+			mdss_mdp_ctl_destroy(mdp5_data->ctl);
+			mdp5_data->ctl = NULL;
 			goto end;
+		}
 		if (mfd->panel_info->type != WRITEBACK_PANEL) {
 			atomic_inc(&mfd->mdp_sync_pt_data.commit_cnt);
 			rc = mdss_mdp_overlay_kickoff(mfd, NULL);
 		}
 	} else {
 		rc = mdss_mdp_ctl_setup(mdp5_data->ctl);
-		if (rc)
+		if (rc) {
+			mdss_mdp_ctl_destroy(mdp5_data->ctl);
+			mdp5_data->ctl = NULL;
 			goto end;
+		}
 	}
 
 panel_on:

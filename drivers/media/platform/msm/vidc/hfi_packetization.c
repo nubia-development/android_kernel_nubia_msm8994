@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -174,6 +174,16 @@ static inline u32 get_hfi_codec(enum hal_video_codec hal_codec)
 		break;
 	}
 	return hfi_codec;
+}
+
+static void create_pkt_enable(void *pkt, u32 type, bool enable)
+{
+         u32 *pkt_header = pkt;
+         u32 *pkt_type = &pkt_header[0];
+         struct hfi_enable *hfi_enable = (struct hfi_enable *)&pkt_header[1];
+
+         *pkt_type = type;
+         hfi_enable->enable = enable;
 }
 
 int create_pkt_cmd_sys_init(struct hfi_cmd_sys_init_packet *pkt,
@@ -1252,7 +1262,7 @@ int create_pkt_cmd_session_set_property(
 			break;
 		default:
 			dprintk(VIDC_ERR,
-					"Invalid Rate control setting: 0x%p\n",
+					"Invalid Rate control setting: 0x%pK\n",
 					pdata);
 			break;
 		}
@@ -1850,6 +1860,14 @@ int create_pkt_cmd_session_set_property(
 			sizeof(struct hfi_hybrid_hierp);
 		break;
 	}
+	case HAL_PARAM_VENC_CONSTRAINED_INTRA_PRED:
+	{
+		create_pkt_enable(pkt->rg_property_data,
+			HFI_PROPERTY_PARAM_VENC_CONSTRAINED_INTRA_PRED,
+			((struct hal_enable *)pdata)->enable);
+		pkt->size += sizeof(u32) + sizeof(struct hfi_enable);
+		break;
+	}
 	/* FOLLOWING PROPERTIES ARE NOT IMPLEMENTED IN CORE YET */
 	case HAL_CONFIG_BUFFER_REQUIREMENTS:
 	case HAL_CONFIG_PRIORITY:
@@ -1908,7 +1926,7 @@ int create_pkt_ssr_cmd(enum hal_ssr_trigger_type type,
 		struct hfi_cmd_sys_test_ssr_packet *pkt)
 {
 	if (!pkt) {
-		dprintk(VIDC_ERR, "Invalid params, device: %p\n", pkt);
+		dprintk(VIDC_ERR, "Invalid params, device: %pK\n", pkt);
 		return -EINVAL;
 	}
 	pkt->size = sizeof(struct hfi_cmd_sys_test_ssr_packet);
@@ -1921,7 +1939,7 @@ int create_pkt_cmd_sys_image_version(
 		struct hfi_cmd_sys_get_property_packet *pkt)
 {
 	if (!pkt) {
-		dprintk(VIDC_ERR, "%s invalid param :%p\n", __func__, pkt);
+		dprintk(VIDC_ERR, "%s invalid param :%pK\n", __func__, pkt);
 		return -EINVAL;
 	}
 	pkt->size = sizeof(struct hfi_cmd_sys_get_property_packet);

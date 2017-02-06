@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -498,7 +498,7 @@ static int msm_ipc_router_ioctl(struct socket *sock,
 
 		if (ret == 0 && n) {
 			ret = copy_to_user((void *)(arg + sizeof(server_arg)),
-					   srv_info, n * sizeof (*srv_info));
+					   srv_info, n * sizeof(*srv_info));
 		}
 
 		if (ret)
@@ -551,10 +551,18 @@ static unsigned int msm_ipc_router_poll(struct file *file,
 static int msm_ipc_router_close(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
-	struct msm_ipc_port *port_ptr = msm_ipc_sk_port(sk);
+	struct msm_ipc_port *port_ptr;
 	int ret;
 
+	if (!sk)
+		return -EINVAL;
+
 	lock_sock(sk);
+	port_ptr = msm_ipc_sk_port(sk);
+	if (!port_ptr) {
+		release_sock(sk);
+		return -EINVAL;
+	}
 	ret = msm_ipc_router_close_port(port_ptr);
 	msm_ipc_unload_default_node(msm_ipc_sk(sk)->default_node_vote_info);
 	release_sock(sk);
