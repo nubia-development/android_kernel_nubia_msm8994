@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2012,2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2012,2014, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -113,9 +113,8 @@ typedef enum
    HDD_WMM_USER_MODE_AUTO = 0,
    //SME will add the extra logic to make sure STA associates with a QAP only
    HDD_WMM_USER_MODE_QBSS_ONLY = 1,
-   //SME will not join a QoS AP, unless the phy mode setting says "Auto". In
-   // that case, STA is free to join 11n AP. Although from HDD point of view,
-   // it will not be doing any packet classifications
+
+   /* Join any AP, but uapsd is disabled */
    HDD_WMM_USER_MODE_NO_QOS = 2,
 
 } hdd_wmm_user_mode_t;
@@ -269,25 +268,14 @@ v_U16_t hdd_wmm_select_queue(struct net_device * dev, struct sk_buff *skb);
   @return         : Qdisc queue index
   ===========================================================================*/
 
-v_U16_t hdd_hostapd_select_queue(struct net_device * dev, struct sk_buff *skb);
-
-
-
-/**============================================================================
-  @brief hdd_wmm_classify_pkt() - Function which will classify an OS packet
-  into a WMM AC based on either 802.1Q or DSCP
-
-  @param pAdapter : [in]  pointer to adapter context
-  @param skb      : [in]  pointer to OS packet (sk_buff)
-  @param pAcType  : [out] pointer to WMM AC type of OS packet
-
-  @return         : None
-  ===========================================================================*/
-v_VOID_t hdd_wmm_classify_pkt ( hdd_adapter_t* pAdapter,
-                                struct sk_buff *skb,
-                                WLANTL_ACEnumType* pAcType,
-                                sme_QosWmmUpType* pUserPri);
-
+v_U16_t hdd_hostapd_select_queue(struct net_device * dev, struct sk_buff *skb
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,13,0))
+                                 , void *accel_priv
+#endif
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
+                                 , select_queue_fallback_t fallback
+#endif
+);
 
 /**============================================================================
   @brief hdd_wmm_acquire_access() - Function which will attempt to acquire
