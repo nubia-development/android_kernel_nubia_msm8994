@@ -488,22 +488,6 @@
 				};
 			};
 		};
-
-		gt1x@5d {
-			compatible = "goodix,gt1x";
-			reg = <0x5d>;
-			interrupt-parent = <&msm_gpio>;
-			interrupts = <61 0x2008>;
-			vdd_ana-supply = <&pm8994_l22>;
-			vcc_i2c-supply = <&pm8994_l14>;
-			vcc_i2c2-supply = <&pm8994_s4>;
-			pinctrl-names = "gt91x_int_default","gt91x_int_sleep";
-			pinctrl-0 = <&gt91x_int_default>;
-			pinctrl-1 = <&gt91x_int_sleep>;
-			goodix,reset-gpio = <&msm_gpio 60 0x00>;
-			goodix,irq-gpio = <&msm_gpio 61 0x2008>;
-		};
-
 		synaptics@20 {
 			compatible = "synaptics,dsx";
 			reg = <0x20>;
@@ -524,6 +508,22 @@
 			clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
 				 <&clock_gcc clk_gcc_blsp1_qup2_i2c_apps_clk>;
 		};
+
+		gt1x@5d {
+			compatible = "goodix,gt1x";
+			reg = <0x5d>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <61 0x2008>;
+			vdd_ana-supply = <&pm8994_l22>;
+			vcc_i2c-supply = <&pm8994_l14>;
+			vcc_i2c2-supply = <&pm8994_s4>;
+			pinctrl-names = "gt91x_int_default","gt91x_int_sleep";
+			pinctrl-0 = <&gt91x_int_default>;
+			pinctrl-1 = <&gt91x_int_sleep>;
+			goodix,reset-gpio = <&msm_gpio 60 0x00>;
+			goodix,irq-gpio = <&msm_gpio 61 0x2008>;
+		};
+
 	};
 
 	gen-vkeys {
