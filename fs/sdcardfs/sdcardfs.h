@@ -525,8 +525,8 @@ static inline int prepare_dir(const char *path_s, uid_t uid, gid_t gid, mode_t m
 		goto out_dput;
 	}
 
-	attrs.ia_uid = uid;
-	attrs.ia_gid = gid;
+	attrs.ia_uid = make_kuid(current_user_ns(), uid);
+	attrs.ia_gid = make_kgid(current_user_ns(), gid);
 	attrs.ia_valid = ATTR_UID | ATTR_GID;
 	mutex_lock(&dent->d_inode->i_mutex);
 	notify_change2(parent.mnt, dent, &attrs);
