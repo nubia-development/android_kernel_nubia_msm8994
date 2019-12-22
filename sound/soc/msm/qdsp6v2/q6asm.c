@@ -2615,6 +2615,8 @@ fail_cmd:
 	return -EINVAL;
 }
 
+		mutex_unlock(&ac->cmd_lock);
+	ac->port[dir].buf = buf_circ;
 int q6asm_run(struct audio_client *ac, uint32_t flags,
 		uint32_t msw_ts, uint32_t lsw_ts)
 {
